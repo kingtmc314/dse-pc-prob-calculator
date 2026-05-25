@@ -22,7 +22,7 @@ import {
 
 // ── Types ──────────────────────────────────────────────────
 type Action = 'P' | 'C';
-type ConstraintType = 'adjacent' | 'non_adjacent' | 'fixed_ends' | 'fixed_head' | 'fixed_tail' | 'at_least' | 'at_most';
+type ConstraintType = 'adjacent' | 'non_adjacent' | 'fixed_ends' | 'fixed_head' | 'fixed_tail' | 'at_least' | 'at_most' | 'exactly';
 type ScenarioKey = 'office' | 'school' | 'restaurant' | 'family';
 
 interface Scenario {
@@ -117,6 +117,7 @@ function calculate(
   const hasFixedTail = constraints.some(c => c.type === 'fixed_tail');
   const atLeastC = constraints.find(c => c.type === 'at_least');
   const atMostC = constraints.find(c => c.type === 'at_most');
+  const exactlyC = constraints.find(c => c.type === 'exactly');
 
   // ── Conflict detection ──
   if (hasAdj && hasNonAdj) {
@@ -338,6 +339,49 @@ function calculate(
           latex: `\\displaystyle ${total}! = ${fmt(ans)}`,
           noteZh: `全排列 = ${total}! = ${fmt(ans)}`,
           noteEn: `Full permutation = ${total}! = ${fmt(ans)}`,
+        },
+      ],
+    };
+  }
+
+  // ── C: Exactly k of Type A ──
+  if (exactlyC) {
+    const k = exactlyC.value ?? 1;
+    const b = selectCount - k;
+    if (k > countA || b < 0 || b > countB) {
+      return {
+        answer: 0, methodZh: '', methodEn: '', steps: [],
+        error: `Cannot select exactly ${k} ${scenario.typeAEn}(s) from ${countA} with ${selectCount} total — invalid combination.`,
+        errorZh: `無法從 ${countA} 個${scenario.typeAZh}中恰好選 ${k} 個（選取總數 ${selectCount}，${scenario.typeBZh}需要 ${b} 個，但只有 ${countB} 個）。`,
+      };
+    }
+    const cA = comb(countA, k);
+    const cB = comb(countB, b);
+    const ans = cA * cB;
+    return {
+      answer: ans,
+      methodZh: `恰好 ${k} 個${scenario.typeAZh}（分類討論）`,
+      methodEn: `Exactly ${k} ${scenario.typeAEn}(s) — Direct Calculation`,
+      steps: [
+        {
+          latex: `\\displaystyle \\text{選 } ${k} \\text{ 個${scenario.typeAZh}，} ${b} \\text{ 個${scenario.typeBZh}}`,
+          noteZh: `恰好 ${k} 個${scenario.typeAZh} + 恰好 ${b} 個${scenario.typeBZh} = ${selectCount} 人。`,
+          noteEn: `Exactly ${k} ${scenario.typeAEn}(s) + exactly ${b} ${scenario.typeBEn}(s) = ${selectCount} people.`,
+        },
+        {
+          latex: `\\displaystyle C_{${k}}^{${countA}} = \\dfrac{${countA}!}{${k}!\\,(${countA}-${k})!} = ${fmt(cA)}`,
+          noteZh: `從 ${countA} 個${scenario.typeAZh}中選 ${k} 個（不計順序）。`,
+          noteEn: `Choose ${k} from ${countA} ${scenario.typeAEn}s (order doesn't matter).`,
+        },
+        {
+          latex: `\\displaystyle C_{${b}}^{${countB}} = \\dfrac{${countB}!}{${b}!\\,(${countB}-${b})!} = ${fmt(cB)}`,
+          noteZh: `從 ${countB} 個${scenario.typeBZh}中選 ${b} 個（不計順序）。`,
+          noteEn: `Choose ${b} from ${countB} ${scenario.typeBEn}s (order doesn't matter).`,
+        },
+        {
+          latex: `\\displaystyle \\text{答案} = C_{${k}}^{${countA}} \\times C_{${b}}^{${countB}} = ${fmt(cA)} \\times ${fmt(cB)} = ${fmt(ans)}`,
+          noteZh: `${scenario.typeAZh}選法 × ${scenario.typeBZh}選法 = 最終答案。`,
+          noteEn: `${scenario.typeAEn} ways × ${scenario.typeBEn} ways = final answer.`,
         },
       ],
     };
@@ -773,6 +817,7 @@ export default function PCPage() {
   const [constraints, setConstraints] = useState<Constraint[]>([]);
   const [atLeastVal, setAtLeastVal] = useState(1);
   const [atMostVal, setAtMostVal] = useState(1);
+  const [exactlyVal, setExactlyVal] = useState(1);
   const [result, setResult] = useState<CalcResult | null>(null);
   const [showPractice, setShowPractice] = useState(false);
 
@@ -792,6 +837,7 @@ export default function PCPage() {
     const updated = constraints.map(c => {
       if (c.type === 'at_least') return { ...c, value: atLeastVal };
       if (c.type === 'at_most') return { ...c, value: atMostVal };
+      if (c.type === 'exactly') return { ...c, value: exactlyVal };
       return c;
     });
     const r = calculate(action, countA, countB, selectCount, updated, circular, scenario);
@@ -1216,6 +1262,44 @@ export default function PCPage() {
                       <input type="number" className="input-field" min={0} max={countA}
                         value={atMostVal}
                         onChange={e => setAtMostVal(Math.max(0, parseInt(e.target.value) || 0))}
+                        style={{ width: 70 }} />
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{zh(`個${scenario.typeAZh}`, `${scenario.typeAEn}(s)`)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {/* Exactly k */}
+              <div
+                onClick={() => toggleConstraint('exactly')}
+                style={{
+                  display: 'flex', alignItems: 'flex-start', gap: '0.75rem', padding: '0.9rem 1rem',
+                  borderRadius: 'var(--r-md)', cursor: 'pointer',
+                  border: `1.5px solid ${hasC('exactly') ? 'rgba(126,200,164,0.5)' : 'var(--border)'}`,
+                  background: hasC('exactly') ? 'rgba(126,200,164,0.06)' : 'var(--bg-card)',
+                  transition: 'all 0.18s',
+                }}>
+                <div style={{
+                  width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginTop: 1,
+                  border: `2px solid ${hasC('exactly') ? 'var(--green)' : 'var(--border)'}`,
+                  background: hasC('exactly') ? 'var(--green)' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {hasC('exactly') && <span style={{ color: '#0A1A10', fontSize: '0.65rem', fontWeight: 700 }}>✓</span>}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.88rem', color: hasC('exactly') ? 'var(--green-bright, #2A7F6F)' : 'var(--text-primary)' }}>
+                    🎯 {zh(`恰好（直接計算）`, 'Exactly k (Direct Calculation)')}
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginTop: 3, marginBottom: hasC('exactly') ? 8 : 0 }}>
+                    {zh(`恰好有多少個${scenario.typeAZh}被選中。公式：C(A,k) × C(B, r−k)`, `Exactly how many ${scenario.typeAEn}s must be selected. Formula: C(A,k) × C(B, r−k)`)}
+                  </div>
+                  {hasC('exactly') && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                      onClick={e => e.stopPropagation()}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{zh('恰好', 'Exactly')}</span>
+                      <input type="number" className="input-field" min={0} max={countA}
+                        value={exactlyVal}
+                        onChange={e => setExactlyVal(Math.max(0, parseInt(e.target.value) || 0))}
                         style={{ width: 70 }} />
                       <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{zh(`個${scenario.typeAZh}`, `${scenario.typeAEn}(s)`)}</span>
                     </div>
