@@ -150,8 +150,8 @@ const FORMULAS: FormulaCard[] = [
     color: 'teal',
   },
   {
-    titleZh: '組合數概率',
-    titleEn: 'Combination-based Probability',
+    titleZh: '排列與組合的概率',
+    titleEn: 'P&C Probability',
     latex: `\\displaystyle P = \\frac{C^{a}_{x} \\cdot C^{b}_{y}}{C^{n}_{r}}, \\quad x + y = r`,
     descZh: '從兩類物件中各取若干個的概率',
     descEn: 'Probability of selecting specific numbers from two types of items',

@@ -1,6 +1,7 @@
 // ============================================================
-// Probability Page – Simple, Combination-based, Bayes Theorem
+// ProbabilityPage.tsx – Simple, P&C Probability, Bayes Theorem
 // + SVG Tree Diagram + Full LaTeX derivation steps
+// + Story-style Scenario Templates for comb mode
 // Design: Light Elegant Academic — ivory bg, deep navy text,
 //         gold/blue/teal accents, math grid background
 // ============================================================
@@ -14,6 +15,53 @@ import {
 } from '../lib/mathEngine';
 
 type Mode = 'single' | 'comb' | 'bayes';
+type ScenarioKey = 'office' | 'school' | 'restaurant' | 'family';
+
+interface Scenario {
+  nameZh: string; nameEn: string;
+  typeAZh: string; typeAEn: string; emojiA: string;
+  typeBZh: string; typeBEn: string; emojiB: string;
+  descZh: string; descEn: string;
+  bgColor: string;
+}
+
+// ── Scenario Database (mirrors PCPage) ────────────────────
+const SCENARIOS: Record<ScenarioKey, Scenario> = {
+  office: {
+    nameZh: '辦公室選拔', nameEn: 'Office Selection',
+    typeAZh: '經理', typeAEn: 'Manager', emojiA: '👔',
+    typeBZh: '員工', typeBEn: 'Staff', emojiB: '💼',
+    descZh: '從經理和員工中隨機抽出委員會',
+    descEn: 'Randomly select a committee from managers and staff',
+    bgColor: 'rgba(212,168,67,0.06)',
+  },
+  school: {
+    nameZh: '影畢業相', nameEn: 'Graduation Photo',
+    typeAZh: '老師', typeAEn: 'Teacher', emojiA: '👨‍🏫',
+    typeBZh: '學生', typeBEn: 'Student', emojiB: '🧑‍🎓',
+    descZh: '從老師和學生中隨機選出代表',
+    descEn: 'Randomly pick representatives from teachers and students',
+    bgColor: 'rgba(107,155,210,0.06)',
+  },
+  restaurant: {
+    nameZh: '茶餐廳點菜', nameEn: 'Cha Chaan Teng',
+    typeAZh: '主食', typeAEn: 'Main Dish', emojiA: '🍛',
+    typeBZh: '飲品', typeBEn: 'Drink', emojiB: '🥤',
+    descZh: '從主食和飲品中隨機抽出套餐',
+    descEn: 'Randomly draw a set meal from dishes and drinks',
+    bgColor: 'rgba(126,200,164,0.06)',
+  },
+  family: {
+    nameZh: '家庭聚餐', nameEn: 'Family Gathering',
+    typeAZh: '成人', typeAEn: 'Adult', emojiA: '👨',
+    typeBZh: '兒童', typeBEn: 'Child', emojiB: '👦',
+    descZh: '從成人和兒童中隨機選出代表',
+    descEn: 'Randomly select representatives from adults and children',
+    bgColor: 'rgba(224,112,112,0.06)',
+  },
+};
+
+const SCENARIO_KEYS: ScenarioKey[] = ['office', 'school', 'restaurant', 'family'];
 
 function gcd(a: number, b: number): number {
   while (b) { [a, b] = [b, a % b]; }
@@ -86,20 +134,15 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
   return (
     <div style={{ overflowX: 'auto', padding: '0.5rem 0' }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ minWidth: 320, display: 'block' }}>
-        {/* Background */}
         <rect x={0} y={0} width={W} height={H} fill="var(--bg-section)" rx={8} />
-
-        {/* Root node */}
         <circle cx={rootX} cy={rootY} r={10} fill="var(--navy)" opacity={0.85} />
         <text x={rootX} y={rootY - 14} textAnchor="middle" fontSize={11}
           fill="var(--text-muted)" fontFamily="Source Sans 3, sans-serif">Ω</text>
 
         {branches.map(({ child, childY, leaves }, ci) => (
           <g key={ci}>
-            {/* Root → child line */}
             <line x1={rootX + 10} y1={rootY} x2={midX - 12} y2={childY}
               stroke="var(--gold-bright)" strokeWidth={1.8} opacity={0.6} />
-            {/* Branch label */}
             <foreignObject
               x={(rootX + midX) / 2 - 22} y={childY + (ci === 0 ? -26 : 6)}
               width={64} height={22}
@@ -109,7 +152,6 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
                 {fracToLatex(child.prob)}
               </div>
             </foreignObject>
-            {/* Child node */}
             <circle cx={midX} cy={childY} r={10} fill="var(--navy-light)" opacity={0.85} />
             <text x={midX} y={childY - 14} textAnchor="middle" fontSize={11}
               fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>
@@ -120,11 +162,9 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
               const lp = leafPositions[ci * 2 + li];
               return (
                 <g key={li}>
-                  {/* Child → leaf */}
                   <line x1={midX + 10} y1={childY} x2={lp.x - 10} y2={lp.y}
                     stroke={lp.isB ? 'var(--teal)' : 'var(--border)'}
                     strokeWidth={lp.isB ? 2 : 1.4} opacity={lp.isB ? 0.8 : 0.5} />
-                  {/* Branch prob */}
                   <foreignObject
                     x={(midX + lp.x) / 2 - 20} y={lp.y + (li === 0 ? -22 : 4)}
                     width={54} height={20}
@@ -134,7 +174,6 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
                       {lp.prob}
                     </div>
                   </foreignObject>
-                  {/* Leaf node */}
                   <circle cx={lp.x} cy={lp.y} r={9}
                     fill={lp.isB ? 'var(--teal)' : 'var(--bg-muted)'}
                     stroke={lp.isB ? 'var(--teal)' : 'var(--border)'}
@@ -143,7 +182,6 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
                     fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>
                     {lp.label}
                   </text>
-                  {/* Joint prob */}
                   {lp.isB && (
                     <foreignObject x={lp.x + 16} y={lp.y - 10} width={100} height={22}>
                       <div style={{ fontSize: 9, color: 'var(--teal)',
@@ -202,6 +240,9 @@ export default function ProbabilityPage() {
   const [cN, setCN] = useState(10);
   const [cR, setCR] = useState(3);
 
+  // Comb scenario
+  const [combScenario, setCombScenario] = useState<ScenarioKey>('office');
+
   // Bayes
   const [pANum, setPANum] = useState(1); const [pADen, setPADen] = useState(10);
   const [pBgANum, setPBgANum] = useState(9); const [pBgADen, setPBgADen] = useState(10);
@@ -244,6 +285,8 @@ export default function ProbabilityPage() {
     comb: t.modeCombProb,
     bayes: t.modeBayes,
   };
+
+  const sc = SCENARIOS[combScenario];
 
   return (
     <div className="page-wrap" style={{ paddingTop: 'clamp(1rem, 3vw, 1.5rem)', paddingBottom: 'clamp(2rem, 5vw, 3rem)' }}>
@@ -309,44 +352,112 @@ export default function ProbabilityPage() {
         </div>
       )}
 
-      {/* ── Combination Prob Inputs ── */}
+      {/* ── P&C Probability Inputs ── */}
       {mode === 'comb' && (
         <div className="card" style={{ padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
-          <div className="section-hd">
-            <div className="section-hd-icon">🔢</div>
+
+          {/* Step 1: Scenario Selector */}
+          <div className="section-hd" style={{ marginBottom: '0.85rem' }}>
+            <div className="section-hd-icon">🎭</div>
             <div>
-              <div className="section-hd-title">{lang === 'zh' ? '組合數概率設定' : 'Combination Probability Setup'}</div>
-              <div className="section-hd-desc">{lang === 'zh' ? '從兩類物件中各取若干個' : 'Select from two groups'}</div>
+              <div className="section-hd-title">{lang === 'zh' ? '第一步：選擇情境' : 'Step 1: Choose Scenario'}</div>
+              <div className="section-hd-desc">{lang === 'zh' ? '選擇一個生活化情境，讓題目更直觀' : 'Pick a real-life context to make the problem more vivid'}</div>
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 'clamp(0.5rem, 1.5vw, 0.85rem)', marginBottom: '0.85rem' }}>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', marginBottom: '1.1rem' }}>
+            {SCENARIO_KEYS.map(key => {
+              const s = SCENARIOS[key];
+              const isActive = combScenario === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => { setCombScenario(key); setProbResult(null); setError(''); }}
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    gap: '0.3rem', padding: '0.65rem 0.5rem',
+                    background: isActive ? 'var(--navy)' : s.bgColor,
+                    border: isActive ? '2px solid var(--navy)' : '1.5px solid var(--border-light)',
+                    borderRadius: 'var(--r-md)',
+                    cursor: 'pointer', transition: 'all 0.18s ease',
+                    color: isActive ? 'white' : 'var(--text-primary)',
+                  }}
+                >
+                  <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{s.emojiA}{s.emojiB}</span>
+                  <span style={{
+                    fontSize: '0.7rem', fontWeight: 700,
+                    fontFamily: 'var(--font-body)',
+                    textAlign: 'center', lineHeight: 1.3,
+                    color: isActive ? 'rgba(255,255,255,0.95)' : 'var(--text-primary)',
+                  }}>
+                    {lang === 'zh' ? s.nameZh : s.nameEn}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Story Banner */}
+          <div style={{
+            background: sc.bgColor,
+            border: '1px solid var(--border-light)',
+            borderLeft: '4px solid var(--gold)',
+            borderRadius: 'var(--r-md)',
+            padding: '0.75rem 1rem',
+            marginBottom: '1rem',
+            fontFamily: 'var(--font-body)',
+          }}>
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
+              {lang === 'zh' ? '題目情境' : 'Scenario'}
+            </div>
+            <div style={{ fontSize: 'clamp(0.78rem, 1.8vw, 0.88rem)', color: 'var(--text-primary)', lineHeight: 1.6 }}>
+              {lang === 'zh'
+                ? `從 ${cN} 人（含 ${cA} 位${sc.typeAZh} ${sc.emojiA} 及 ${cB} 位${sc.typeBZh} ${sc.emojiB}）中隨機選出 ${cR} 人，恰好有 ${cX} 位${sc.typeAZh}及 ${cY} 位${sc.typeBZh}的概率是？`
+                : `From ${cN} people (${cA} ${sc.typeAEn}s ${sc.emojiA} and ${cB} ${sc.typeBEn}s ${sc.emojiB}), ${cR} are randomly chosen. What is the probability of getting exactly ${cX} ${sc.typeAEn}(s) and ${cY} ${sc.typeBEn}(s)?`
+              }
+            </div>
+          </div>
+
+          {/* Step 2: Inputs */}
+          <div className="section-hd" style={{ marginBottom: '0.75rem' }}>
+            <div className="section-hd-icon">🔢</div>
             <div>
-              <label className="input-label">{lang === 'zh' ? '總數 n' : 'Total n'}</label>
+              <div className="section-hd-title">{lang === 'zh' ? '第二步：輸入數值' : 'Step 2: Enter Values'}</div>
+              <div className="section-hd-desc">{lang === 'zh' ? '設定總人數及各類型的數量' : 'Set total count and group sizes'}</div>
+            </div>
+          </div>
+
+          {/* Total n and r */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.5rem, 1.5vw, 0.85rem)', marginBottom: '0.85rem' }}>
+            <div>
+              <label className="input-label">{lang === 'zh' ? 'Total n' : 'Total n'}</label>
               <input type="number" min={1} value={cN}
                 onChange={e => setCN(Math.max(1, parseInt(e.target.value) || 1))}
                 className="input-field" />
             </div>
             <div>
-              <label className="input-label">{lang === 'zh' ? '取出 r 個' : 'Select r'}</label>
+              <label className="input-label">{lang === 'zh' ? '選出 r 人' : 'Select r'}</label>
               <input type="number" min={1} value={cR}
                 onChange={e => setCR(Math.max(1, parseInt(e.target.value) || 1))}
                 className="input-field" />
             </div>
           </div>
+
+          {/* Type A and B */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.5rem, 1.5vw, 0.85rem)', marginBottom: '0.85rem' }}>
             <div className="card-flat" style={{ padding: 'clamp(0.65rem, 2vw, 1rem)' }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem', fontFamily: 'var(--font-body)' }}>
-                {lang === 'zh' ? '類型 A' : 'Type A'}
+                {sc.emojiA} {lang === 'zh' ? sc.typeAZh : sc.typeAEn}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div>
-                  <label className="input-label">{lang === 'zh' ? 'A 總數' : 'Total A'}</label>
+                  <label className="input-label">{lang === 'zh' ? `${sc.typeAZh}總數 a` : `Total ${sc.typeAEn}s (a)`}</label>
                   <input type="number" min={0} value={cA}
                     onChange={e => setCA(Math.max(0, parseInt(e.target.value) || 0))}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="input-label">{lang === 'zh' ? '從 A 取 x 個' : 'Select x from A'}</label>
+                  <label className="input-label">{lang === 'zh' ? `選 x 位${sc.typeAZh}` : `Select x ${sc.typeAEn}s`}</label>
                   <input type="number" min={0} value={cX}
                     onChange={e => setCX(Math.max(0, parseInt(e.target.value) || 0))}
                     className="input-field" />
@@ -355,17 +466,17 @@ export default function ProbabilityPage() {
             </div>
             <div className="card-flat" style={{ padding: 'clamp(0.65rem, 2vw, 1rem)' }}>
               <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--navy-light)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem', fontFamily: 'var(--font-body)' }}>
-                {lang === 'zh' ? '類型 B' : 'Type B'}
+                {sc.emojiB} {lang === 'zh' ? sc.typeBZh : sc.typeBEn}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div>
-                  <label className="input-label">{lang === 'zh' ? 'B 總數' : 'Total B'}</label>
+                  <label className="input-label">{lang === 'zh' ? `${sc.typeBZh}總數 b` : `Total ${sc.typeBEn}s (b)`}</label>
                   <input type="number" min={0} value={cB}
                     onChange={e => setCB(Math.max(0, parseInt(e.target.value) || 0))}
                     className="input-field" />
                 </div>
                 <div>
-                  <label className="input-label">{lang === 'zh' ? '從 B 取 y 個' : 'Select y from B'}</label>
+                  <label className="input-label">{lang === 'zh' ? `選 y 位${sc.typeBZh}` : `Select y ${sc.typeBEn}s`}</label>
                   <input type="number" min={0} value={cY}
                     onChange={e => setCY(Math.max(0, parseInt(e.target.value) || 0))}
                     className="input-field" />
@@ -373,8 +484,22 @@ export default function ProbabilityPage() {
               </div>
             </div>
           </div>
+
+          {/* Constraint hint */}
+          <div style={{
+            fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)',
+            marginBottom: '0.85rem', padding: '0.5rem 0.75rem',
+            background: 'var(--bg-section)', borderRadius: 'var(--r-sm)',
+            border: '1px solid var(--border-light)',
+          }}>
+            {lang === 'zh'
+              ? `⚠️ 注意：x + y 必須等於 r（目前：${cX} + ${cY} = ${cX + cY}，r = ${cR}）`
+              : `⚠️ Note: x + y must equal r (currently: ${cX} + ${cY} = ${cX + cY}, r = ${cR})`
+            }
+          </div>
+
           <button onClick={calculate} className="btn-primary">
-            {lang === 'zh' ? '計算' : 'Calculate'}
+            {lang === 'zh' ? '計算概率' : 'Calculate Probability'}
           </button>
         </div>
       )}
@@ -425,6 +550,27 @@ export default function ProbabilityPage() {
               {t.labelProbResult}
             </span>
           </div>
+
+          {/* Story result summary for comb mode */}
+          {mode === 'comb' && (
+            <div style={{
+              background: sc.bgColor,
+              border: '1px solid var(--border-light)',
+              borderLeft: '4px solid var(--teal)',
+              borderRadius: 'var(--r-md)',
+              padding: '0.65rem 0.9rem',
+              marginBottom: '0.85rem',
+              fontSize: 'clamp(0.75rem, 1.7vw, 0.85rem)',
+              color: 'var(--text-primary)',
+              fontFamily: 'var(--font-body)',
+              lineHeight: 1.6,
+            }}>
+              {lang === 'zh'
+                ? `${sc.emojiA} ${sc.typeAZh} × ${cX} 人 + ${sc.emojiB} ${sc.typeBZh} × ${cY} 人，從 ${cN} 人中選 ${cR} 人`
+                : `${sc.emojiA} ${cX} ${sc.typeAEn}(s) + ${sc.emojiB} ${cY} ${sc.typeBEn}(s), choosing ${cR} from ${cN}`
+              }
+            </div>
+          )}
 
           <div className="formula-box" style={{ marginBottom: '0.85rem' }}>
             <KatexRenderer display latex={`\\displaystyle ${probResult.latex}`} />
