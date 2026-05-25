@@ -1,0 +1,68 @@
+/* ============================================================
+   Dark Academic / Chalkboard Theme
+   DSE P&C Probability Calculator
+   ============================================================ */
+
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+HK:wght@300;400;500;600&display=swap');
+@import 'katex/dist/katex.min.css';
+
+:root {
+  /* Core palette */
+  --bg:      #1A1F2E;
+  --bg2:     #1E2433;
+  --bg3:     #242B3D;
+  --border:  rgba(255,255,255,0.08);
+  --border-hover: rgba(255,255,255,0.15);
+
+  /* Text */
+  --text:      #E8E0D0;
+  --text-muted: rgba(232,224,208,0.55);
+  --text-dim:   rgba(232,224,208,0.3);
+
+  /* Accent colors */
+  --gold:  #D4A843;
+  --blue:  #6B9BD2;
+  --green: #7EC8A4;
+  --red:   #E07070;
+
+  font-family: 'Noto Sans HK', 'Cormorant Garamond', sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/* KaTeX overrides for dark theme */
+.katex {
+  color: var(--text) !important;
+  font-size: 1em;
+}
+.katex-display {
+  margin: 0.5em 0 !important;
+  overflow-x: auto;
+}
+.katex-display > .katex {
+  color: var(--text) !important;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Button active scale */
+button:active:not(:disabled) { transform: scale(0.97); }
+button { transition: all 0.15s cubic-bezier(0.23, 1, 0.32, 1); }
