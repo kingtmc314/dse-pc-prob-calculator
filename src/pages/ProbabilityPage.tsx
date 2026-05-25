@@ -1,118 +1,288 @@
 // ============================================================
 // ProbabilityPage.tsx – Simple, P&C Probability, Bayes Theorem
 // + SVG Tree Diagram + Full LaTeX derivation steps
-// + Story-style Scenario Templates for comb mode
-// Design: Light Elegant Academic — ivory bg, deep navy text,
-//         gold/blue/teal accents, math grid background
+// + Flexible Term Builder for comb mode (n!, nPr, nCr, mixed)
+// Design: Light Elegant Academic
 // ============================================================
 
 import { useState, useCallback } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
 import {
-  simpleProbability, combinationProbability, bayesTheorem,
-  fracToLatex, type ProbResult, type BayesResult, type BayesTreeNode,
+  simpleProbability, flexibleProbability, bayesTheorem,
+  fracToLatex, termToLatex, evalTerm,
+  type ProbResult, type BayesResult, type BayesTreeNode,
+  type ExprTerm, type TermType,
 } from '../lib/mathEngine';
 
 type Mode = 'single' | 'comb' | 'bayes';
-type ScenarioKey = 'office' | 'school' | 'restaurant' | 'family';
-
-interface Scenario {
-  nameZh: string; nameEn: string;
-  typeAZh: string; typeAEn: string; emojiA: string;
-  typeBZh: string; typeBEn: string; emojiB: string;
-  descZh: string; descEn: string;
-  bgColor: string;
-}
-
-// ── Scenario Database (mirrors PCPage) ────────────────────
-const SCENARIOS: Record<ScenarioKey, Scenario> = {
-  office: {
-    nameZh: '辦公室選拔', nameEn: 'Office Selection',
-    typeAZh: '經理', typeAEn: 'Manager', emojiA: '👔',
-    typeBZh: '員工', typeBEn: 'Staff', emojiB: '💼',
-    descZh: '從經理和員工中隨機抽出委員會',
-    descEn: 'Randomly select a committee from managers and staff',
-    bgColor: 'rgba(212,168,67,0.06)',
-  },
-  school: {
-    nameZh: '影畢業相', nameEn: 'Graduation Photo',
-    typeAZh: '老師', typeAEn: 'Teacher', emojiA: '👨‍🏫',
-    typeBZh: '學生', typeBEn: 'Student', emojiB: '🧑‍🎓',
-    descZh: '從老師和學生中隨機選出代表',
-    descEn: 'Randomly pick representatives from teachers and students',
-    bgColor: 'rgba(107,155,210,0.06)',
-  },
-  restaurant: {
-    nameZh: '茶餐廳點菜', nameEn: 'Cha Chaan Teng',
-    typeAZh: '主食', typeAEn: 'Main Dish', emojiA: '🍛',
-    typeBZh: '飲品', typeBEn: 'Drink', emojiB: '🥤',
-    descZh: '從主食和飲品中隨機抽出套餐',
-    descEn: 'Randomly draw a set meal from dishes and drinks',
-    bgColor: 'rgba(126,200,164,0.06)',
-  },
-  family: {
-    nameZh: '家庭聚餐', nameEn: 'Family Gathering',
-    typeAZh: '成人', typeAEn: 'Adult', emojiA: '👨',
-    typeBZh: '兒童', typeBEn: 'Child', emojiB: '👦',
-    descZh: '從成人和兒童中隨機選出代表',
-    descEn: 'Randomly select representatives from adults and children',
-    bgColor: 'rgba(224,112,112,0.06)',
-  },
-};
-
-const SCENARIO_KEYS: ScenarioKey[] = ['office', 'school', 'restaurant', 'family'];
 
 function gcd(a: number, b: number): number {
   while (b) { [a, b] = [b, a % b]; }
   return a;
 }
 
-// ── Fraction input helper ──────────────────────────────────
+// ── Term Row Component ─────────────────────────────────────
+function TermRow({
+  term, index, onUpdate, onRemove, lang,
+}: {
+  term: ExprTerm;
+  index: number;
+  onUpdate: (i: number, t: ExprTerm) => void;
+  onRemove: (i: number) => void;
+  lang: string;
+}) {
+  const typeLabel: Record<TermType, string> = {
+    factorial: lang === 'zh' ? 'n!' : 'n!',
+    permutation: lang === 'zh' ? 'P(n,r) 排列' : 'P(n,r) Perm',
+    combination: lang === 'zh' ? 'C(n,r) 組合' : 'C(n,r) Comb',
+  };
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.5rem',
+      background: 'var(--bg-section)',
+      border: '1px solid var(--border-light)',
+      borderRadius: 'var(--r-md)',
+      padding: '0.5rem 0.65rem',
+      flexWrap: 'wrap',
+    }}>
+      {/* Type selector */}
+      <select
+        value={term.type}
+        onChange={e => {
+          const newType = e.target.value as TermType;
+          onUpdate(index, { ...term, type: newType, r: newType === 'factorial' ? undefined : (term.r ?? 1) });
+        }}
+        style={{
+          padding: '0.25rem 0.4rem',
+          borderRadius: 'var(--r-sm)',
+          border: '1px solid var(--border)',
+          background: 'var(--bg-card)',
+          color: 'var(--text-primary)',
+          fontSize: '0.75rem',
+          fontFamily: 'var(--font-body)',
+          cursor: 'pointer',
+        }}
+      >
+        {(['factorial', 'permutation', 'combination'] as TermType[]).map(t => (
+          <option key={t} value={t}>{typeLabel[t]}</option>
+        ))}
+      </select>
+
+      {/* n input */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)' }}>n=</span>
+        <input
+          type="number" min={0} max={20} value={term.n}
+          onChange={e => onUpdate(index, { ...term, n: Math.max(0, Math.min(20, parseInt(e.target.value) || 0)) })}
+          style={{
+            width: 44, padding: '0.25rem 0.35rem',
+            borderRadius: 'var(--r-sm)',
+            border: '1px solid var(--border)',
+            background: 'var(--bg-card)',
+            color: 'var(--text-primary)',
+            fontSize: '0.8rem',
+            fontFamily: 'var(--font-mono)',
+            textAlign: 'center',
+          }}
+        />
+      </div>
+
+      {/* r input (only for P and C) */}
+      {term.type !== 'factorial' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)' }}>r=</span>
+          <input
+            type="number" min={0} max={term.n} value={term.r ?? 0}
+            onChange={e => onUpdate(index, { ...term, r: Math.max(0, Math.min(term.n, parseInt(e.target.value) || 0)) })}
+            style={{
+              width: 44, padding: '0.25rem 0.35rem',
+              borderRadius: 'var(--r-sm)',
+              border: '1px solid var(--border)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              fontSize: '0.8rem',
+              fontFamily: 'var(--font-mono)',
+              textAlign: 'center',
+            }}
+          />
+        </div>
+      )}
+
+      {/* LaTeX preview */}
+      <div style={{
+        flex: 1, minWidth: 60,
+        padding: '0.2rem 0.4rem',
+        background: 'rgba(255,255,255,0.6)',
+        border: '1px solid var(--border-light)',
+        borderRadius: 'var(--r-sm)',
+        overflow: 'hidden',
+      }}>
+        <KatexRenderer latex={`\\displaystyle ${termToLatex(term)}`} display={false} />
+      </div>
+
+      {/* Numeric value */}
+      <div style={{
+        fontSize: '0.72rem', color: 'var(--teal)', fontFamily: 'var(--font-mono)',
+        fontWeight: 600, minWidth: 36, textAlign: 'right',
+      }}>
+        {(() => { try { return '= ' + evalTerm(term).toLocaleString(); } catch { return '—'; } })()}
+      </div>
+
+      {/* Remove button */}
+      <button
+        onClick={() => onRemove(index)}
+        style={{
+          width: 22, height: 22, borderRadius: '50%',
+          background: 'rgba(192,57,43,0.1)', border: '1px solid rgba(192,57,43,0.2)',
+          color: 'var(--red)', cursor: 'pointer', fontSize: '0.75rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0, transition: 'all 0.15s',
+        }}
+        title="Remove"
+      >×</button>
+    </div>
+  );
+}
+
+// ── Term List Builder ──────────────────────────────────────
+function TermListBuilder({
+  label, terms, onChange, lang, accentColor,
+}: {
+  label: string;
+  terms: ExprTerm[];
+  onChange: (terms: ExprTerm[]) => void;
+  lang: string;
+  accentColor: string;
+}) {
+  const addTerm = (type: TermType) => {
+    onChange([...terms, { type, n: 5, r: type === 'factorial' ? undefined : 2 }]);
+  };
+  const updateTerm = (i: number, t: ExprTerm) => {
+    const next = [...terms]; next[i] = t; onChange(next);
+  };
+  const removeTerm = (i: number) => {
+    onChange(terms.filter((_, idx) => idx !== i));
+  };
+
+  // Compute product value
+  let productVal = 1;
+  let productErr = '';
+  try {
+    productVal = terms.reduce((acc, t) => acc * evalTerm(t), 1);
+  } catch (e: unknown) {
+    productErr = e instanceof Error ? e.message : 'Error';
+  }
+
+  return (
+    <div style={{ marginBottom: '0.85rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ width: 4, height: 18, background: accentColor, borderRadius: 2, flexShrink: 0 }} />
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--navy)', fontFamily: 'var(--font-body)' }}>{label}</span>
+          {terms.length > 0 && !productErr && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--teal)', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+              = {productVal.toLocaleString()}
+            </span>
+          )}
+          {productErr && (
+            <span style={{ fontSize: '0.68rem', color: 'var(--red)', fontFamily: 'var(--font-body)' }}>⚠️ {productErr}</span>
+          )}
+        </div>
+        {/* Add buttons */}
+        <div style={{ display: 'flex', gap: '0.3rem' }}>
+          {(['factorial', 'permutation', 'combination'] as TermType[]).map(t => (
+            <button
+              key={t}
+              onClick={() => addTerm(t)}
+              style={{
+                padding: '0.2rem 0.5rem',
+                borderRadius: 'var(--r-sm)',
+                border: `1px solid ${accentColor}50`,
+                background: `${accentColor}10`,
+                color: accentColor,
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                transition: 'all 0.15s',
+              }}
+            >
+              + {t === 'factorial' ? 'n!' : t === 'permutation' ? 'P(n,r)' : 'C(n,r)'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {terms.length === 0 ? (
+        <div style={{
+          padding: '0.5rem 0.75rem',
+          background: 'var(--bg-section)',
+          border: '1px dashed var(--border)',
+          borderRadius: 'var(--r-md)',
+          fontSize: '0.72rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)',
+          textAlign: 'center',
+        }}>
+          {lang === 'zh' ? '點擊上方按鈕加入項目' : 'Click buttons above to add terms'}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          {terms.map((t, i) => (
+            <TermRow key={i} term={t} index={i} onUpdate={updateTerm} onRemove={removeTerm} lang={lang} />
+          ))}
+          {/* Product LaTeX preview */}
+          {terms.length > 1 && (
+            <div style={{
+              padding: '0.35rem 0.6rem',
+              background: 'rgba(255,255,255,0.7)',
+              border: '1px solid var(--border-light)',
+              borderRadius: 'var(--r-sm)',
+              overflowX: 'auto',
+            }}>
+              <KatexRenderer display={false} latex={`\\displaystyle ${terms.map(t => termToLatex(t)).join(' \\times ')}`} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Fraction Input ─────────────────────────────────────────
 function FractionInput({
   label, num, den, onNum, onDen,
 }: {
-  label: string;
-  num: number; den: number;
+  label: string; num: number; den: number;
   onNum: (v: number) => void; onDen: (v: number) => void;
 }) {
   return (
     <div>
       <label className="input-label">{label}</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-        <input
-          type="number" min={0} value={num}
+        <input type="number" min={0} value={num}
           onChange={e => onNum(Math.max(0, parseInt(e.target.value) || 0))}
-          className="input-field"
-          style={{ flex: 1 }}
-        />
+          className="input-field" style={{ flex: 1 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: '1.1rem', fontWeight: 300 }}>/</span>
-        <input
-          type="number" min={1} value={den}
+        <input type="number" min={1} value={den}
           onChange={e => onDen(Math.max(1, parseInt(e.target.value) || 1))}
-          className="input-field"
-          style={{ flex: 1 }}
-        />
+          className="input-field" style={{ flex: 1 }} />
       </div>
     </div>
   );
 }
 
-// ── SVG Tree Diagram (light theme) ────────────────────────
+// ── SVG Tree Diagram ───────────────────────────────────────
 function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
   const root = data[0];
   if (!root?.children) return null;
-
   const W = 480, H = 280;
   const rootX = 40, rootY = H / 2;
-  const midX = 180;
-  const leafX = 360;
-
+  const midX = 180, leafX = 360;
   const branches = root.children.map((child, ci) => {
     const childY = ci === 0 ? H * 0.25 : H * 0.75;
     return { child, childY, leaves: child.children || [] };
   });
-
   const leafPositions: { x: number; y: number; label: string; prob: string; joint: string; isB: boolean }[] = [];
   branches.forEach(({ child, childY, leaves }) => {
     leaves.forEach((leaf, li) => {
@@ -122,72 +292,42 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
       const g = Math.abs(jointNum) > 0 ? gcd(Math.abs(jointNum), Math.abs(jointDen)) : 1;
       const jFrac = { num: jointNum / g, den: jointDen / g };
       leafPositions.push({
-        x: leafX, y: leafY,
-        label: leaf.label,
-        prob: fracToLatex(leaf.prob),
-        joint: fracToLatex(jFrac),
+        x: leafX, y: leafY, label: leaf.label,
+        prob: fracToLatex(leaf.prob), joint: fracToLatex(jFrac),
         isB: leaf.label === 'B',
       });
     });
   });
-
   return (
     <div style={{ overflowX: 'auto', padding: '0.5rem 0' }}>
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ minWidth: 320, display: 'block' }}>
         <rect x={0} y={0} width={W} height={H} fill="var(--bg-section)" rx={8} />
         <circle cx={rootX} cy={rootY} r={10} fill="var(--navy)" opacity={0.85} />
-        <text x={rootX} y={rootY - 14} textAnchor="middle" fontSize={11}
-          fill="var(--text-muted)" fontFamily="Source Sans 3, sans-serif">Ω</text>
-
+        <text x={rootX} y={rootY - 14} textAnchor="middle" fontSize={11} fill="var(--text-muted)" fontFamily="Source Sans 3, sans-serif">Ω</text>
         {branches.map(({ child, childY, leaves }, ci) => (
           <g key={ci}>
-            <line x1={rootX + 10} y1={rootY} x2={midX - 12} y2={childY}
-              stroke="var(--gold-bright)" strokeWidth={1.8} opacity={0.6} />
-            <foreignObject
-              x={(rootX + midX) / 2 - 22} y={childY + (ci === 0 ? -26 : 6)}
-              width={64} height={22}
-            >
-              <div style={{ fontSize: 10, color: 'var(--gold)', textAlign: 'center',
-                fontFamily: 'JetBrains Mono, monospace' }}>
-                {fracToLatex(child.prob)}
-              </div>
+            <line x1={rootX + 10} y1={rootY} x2={midX - 12} y2={childY} stroke="var(--gold-bright)" strokeWidth={1.8} opacity={0.6} />
+            <foreignObject x={(rootX + midX) / 2 - 22} y={childY + (ci === 0 ? -26 : 6)} width={64} height={22}>
+              <div style={{ fontSize: 10, color: 'var(--gold)', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }}>{fracToLatex(child.prob)}</div>
             </foreignObject>
             <circle cx={midX} cy={childY} r={10} fill="var(--navy-light)" opacity={0.85} />
-            <text x={midX} y={childY - 14} textAnchor="middle" fontSize={11}
-              fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>
-              {child.label}
-            </text>
-
+            <text x={midX} y={childY - 14} textAnchor="middle" fontSize={11} fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>{child.label}</text>
             {leaves.map((_leaf, li) => {
               const lp = leafPositions[ci * 2 + li];
               return (
                 <g key={li}>
                   <line x1={midX + 10} y1={childY} x2={lp.x - 10} y2={lp.y}
-                    stroke={lp.isB ? 'var(--teal)' : 'var(--border)'}
-                    strokeWidth={lp.isB ? 2 : 1.4} opacity={lp.isB ? 0.8 : 0.5} />
-                  <foreignObject
-                    x={(midX + lp.x) / 2 - 20} y={lp.y + (li === 0 ? -22 : 4)}
-                    width={54} height={20}
-                  >
-                    <div style={{ fontSize: 9, color: 'var(--navy-light)', textAlign: 'center',
-                      fontFamily: 'JetBrains Mono, monospace' }}>
-                      {lp.prob}
-                    </div>
+                    stroke={lp.isB ? 'var(--teal)' : 'var(--border)'} strokeWidth={lp.isB ? 2 : 1.4} opacity={lp.isB ? 0.8 : 0.5} />
+                  <foreignObject x={(midX + lp.x) / 2 - 20} y={lp.y + (li === 0 ? -22 : 4)} width={54} height={20}>
+                    <div style={{ fontSize: 9, color: 'var(--navy-light)', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }}>{lp.prob}</div>
                   </foreignObject>
                   <circle cx={lp.x} cy={lp.y} r={9}
                     fill={lp.isB ? 'var(--teal)' : 'var(--bg-muted)'}
-                    stroke={lp.isB ? 'var(--teal)' : 'var(--border)'}
-                    strokeWidth={1.5} opacity={lp.isB ? 0.85 : 0.7} />
-                  <text x={lp.x} y={lp.y - 13} textAnchor="middle" fontSize={10}
-                    fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>
-                    {lp.label}
-                  </text>
+                    stroke={lp.isB ? 'var(--teal)' : 'var(--border)'} strokeWidth={1.5} opacity={lp.isB ? 0.85 : 0.7} />
+                  <text x={lp.x} y={lp.y - 13} textAnchor="middle" fontSize={10} fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>{lp.label}</text>
                   {lp.isB && (
                     <foreignObject x={lp.x + 16} y={lp.y - 10} width={100} height={22}>
-                      <div style={{ fontSize: 9, color: 'var(--teal)',
-                        fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>
-                        = {lp.joint}
-                      </div>
+                      <div style={{ fontSize: 9, color: 'var(--teal)', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>= {lp.joint}</div>
                     </foreignObject>
                   )}
                 </g>
@@ -200,22 +340,19 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
   );
 }
 
-// ── Step card ─────────────────────────────────────────────
+// ── Step Card ──────────────────────────────────────────────
 function StepCard({ latex, index }: { latex: string; index: number }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
-      background: 'var(--bg-section)',
-      border: '1px solid var(--border-light)',
+      background: 'var(--bg-section)', border: '1px solid var(--border-light)',
       borderRadius: 'var(--r-md)',
       padding: 'clamp(0.6rem, 2vw, 0.9rem) clamp(0.75rem, 2vw, 1.1rem)',
     }}>
       <span style={{
-        width: 22, height: 22, borderRadius: '50%',
-        background: 'var(--navy)', color: 'white',
+        width: 22, height: 22, borderRadius: '50%', background: 'var(--navy)', color: 'white',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: '0.65rem', fontWeight: 700, flexShrink: 0,
-        fontFamily: 'var(--font-body)',
+        fontSize: '0.65rem', fontWeight: 700, flexShrink: 0, fontFamily: 'var(--font-body)',
       }}>{index + 1}</span>
       <div style={{ flex: 1, overflowX: 'auto' }}>
         <KatexRenderer display latex={latex} />
@@ -224,6 +361,7 @@ function StepCard({ latex, index }: { latex: string; index: number }) {
   );
 }
 
+// ── Main Page ──────────────────────────────────────────────
 export default function ProbabilityPage() {
   const { t, lang } = useLang();
   const [mode, setMode] = useState<Mode>('single');
@@ -232,16 +370,14 @@ export default function ProbabilityPage() {
   const [fav, setFav] = useState(3);
   const [total, setTotal] = useState(10);
 
-  // Comb prob
-  const [cA, setCA] = useState(5);
-  const [cX, setCX] = useState(2);
-  const [cB, setCB] = useState(5);
-  const [cY, setCY] = useState(1);
-  const [cN, setCN] = useState(10);
-  const [cR, setCR] = useState(3);
-
-  // Comb scenario
-  const [combScenario, setCombScenario] = useState<ScenarioKey>('office');
+  // Flexible comb prob
+  const [numTerms, setNumTerms] = useState<ExprTerm[]>([
+    { type: 'combination', n: 5, r: 2 },
+    { type: 'combination', n: 5, r: 1 },
+  ]);
+  const [denTerms, setDenTerms] = useState<ExprTerm[]>([
+    { type: 'combination', n: 10, r: 3 },
+  ]);
 
   // Bayes
   const [pANum, setPANum] = useState(1); const [pADen, setPADen] = useState(10);
@@ -263,22 +399,18 @@ export default function ProbabilityPage() {
         if (fav > total) { setError(lang === 'zh' ? '有利結果不能大於總結果' : 'Favourable outcomes cannot exceed total outcomes'); return; }
         setProbResult(simpleProbability(fav, total));
       } else if (mode === 'comb') {
-        if (cX + cY !== cR) { setError(lang === 'zh' ? `x + y 必須等於 r（${cX} + ${cY} ≠ ${cR}）` : `x + y must equal r (${cX} + ${cY} ≠ ${cR})`); return; }
-        if (cX > cA || cY > cB) { setError(lang === 'zh' ? '選取數不能超過各類型總數' : 'Selection cannot exceed group totals'); return; }
-        setProbResult(combinationProbability(cN, cR, cA, cX, cB, cY));
+        if (numTerms.length === 0) { setError(lang === 'zh' ? '請在分子加入至少一個項目' : 'Add at least one term to the numerator'); return; }
+        if (denTerms.length === 0) { setError(lang === 'zh' ? '請在分母加入至少一個項目' : 'Add at least one term to the denominator'); return; }
+        setProbResult(flexibleProbability(numTerms, denTerms));
       } else {
         if (pANum > pADen) { setError(lang === 'zh' ? 'P(A) 不能大於 1' : 'P(A) cannot exceed 1'); return; }
-        setBayesResult(bayesTheorem(
-          [pANum, pADen],
-          [pBgANum, pBgADen],
-          [pBgAcNum, pBgAcDen],
-        ));
+        setBayesResult(bayesTheorem([pANum, pADen], [pBgANum, pBgADen], [pBgAcNum, pBgAcDen]));
         setShowTree(true);
       }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error');
     }
-  }, [mode, fav, total, cA, cX, cB, cY, cN, cR, pANum, pADen, pBgANum, pBgADen, pBgAcNum, pBgAcDen, lang]);
+  }, [mode, fav, total, numTerms, denTerms, pANum, pADen, pBgANum, pBgADen, pBgAcNum, pBgAcDen, lang]);
 
   const modeLabels: Record<Mode, string> = {
     single: t.modeSingle,
@@ -286,7 +418,13 @@ export default function ProbabilityPage() {
     bayes: t.modeBayes,
   };
 
-  const sc = SCENARIOS[combScenario];
+  // Build formula preview LaTeX for comb mode
+  const combFormulaPreview = (() => {
+    if (numTerms.length === 0 && denTerms.length === 0) return `\\displaystyle P = \\frac{\\text{Numerator}}{\\text{Denominator}}`;
+    const numL = numTerms.length > 0 ? numTerms.map(t => termToLatex(t)).join(' \\times ') : '1';
+    const denL = denTerms.length > 0 ? denTerms.map(t => termToLatex(t)).join(' \\times ') : '1';
+    return `\\displaystyle P = \\frac{${numL}}{${denL}}`;
+  })();
 
   return (
     <div className="page-wrap" style={{ paddingTop: 'clamp(1rem, 3vw, 1.5rem)', paddingBottom: 'clamp(2rem, 5vw, 3rem)' }}>
@@ -299,11 +437,9 @@ export default function ProbabilityPage() {
       {/* Mode Selector */}
       <div className="tab-group" style={{ marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
         {(['single', 'comb', 'bayes'] as Mode[]).map(m => (
-          <button
-            key={m}
+          <button key={m}
             onClick={() => { setMode(m); setProbResult(null); setBayesResult(null); setError(''); }}
-            className={`tab-btn ${mode === m ? 'active' : ''}`}
-          >
+            className={`tab-btn ${mode === m ? 'active' : ''}`}>
             {modeLabels[m]}
           </button>
         ))}
@@ -315,7 +451,7 @@ export default function ProbabilityPage() {
           mode === 'single'
             ? `\\displaystyle P = \\frac{\\text{${lang === 'zh' ? '有利結果數' : 'Favourable outcomes'}}}{\\text{${lang === 'zh' ? '總結果數' : 'Total outcomes'}}}`
             : mode === 'comb'
-              ? `\\displaystyle P = \\frac{C^{a}_{x} \\times C^{b}_{y}}{C^{n}_{r}}`
+              ? combFormulaPreview
               : `\\displaystyle P(A \\mid B) = \\frac{P(B \\mid A) \\cdot P(A)}{P(B \\mid A) \\cdot P(A) + P(B \\mid A') \\cdot P(A')}`
         } />
       </div>
@@ -352,153 +488,69 @@ export default function ProbabilityPage() {
         </div>
       )}
 
-      {/* ── P&C Probability Inputs ── */}
+      {/* ── Flexible P&C Probability Inputs ── */}
       {mode === 'comb' && (
         <div className="card" style={{ padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
-
-          {/* Step 1: Scenario Selector */}
-          <div className="section-hd" style={{ marginBottom: '0.85rem' }}>
-            <div className="section-hd-icon">🎭</div>
-            <div>
-              <div className="section-hd-title">{lang === 'zh' ? '第一步：選擇情境' : 'Step 1: Choose Scenario'}</div>
-              <div className="section-hd-desc">{lang === 'zh' ? '選擇一個生活化情境，讓題目更直觀' : 'Pick a real-life context to make the problem more vivid'}</div>
-            </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', marginBottom: '1.1rem' }}>
-            {SCENARIO_KEYS.map(key => {
-              const s = SCENARIOS[key];
-              const isActive = combScenario === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => { setCombScenario(key); setProbResult(null); setError(''); }}
-                  style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center',
-                    gap: '0.3rem', padding: '0.65rem 0.5rem',
-                    background: isActive ? 'var(--navy)' : s.bgColor,
-                    border: isActive ? '2px solid var(--navy)' : '1.5px solid var(--border-light)',
-                    borderRadius: 'var(--r-md)',
-                    cursor: 'pointer', transition: 'all 0.18s ease',
-                    color: isActive ? 'white' : 'var(--text-primary)',
-                  }}
-                >
-                  <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>{s.emojiA}{s.emojiB}</span>
-                  <span style={{
-                    fontSize: '0.7rem', fontWeight: 700,
-                    fontFamily: 'var(--font-body)',
-                    textAlign: 'center', lineHeight: 1.3,
-                    color: isActive ? 'rgba(255,255,255,0.95)' : 'var(--text-primary)',
-                  }}>
-                    {lang === 'zh' ? s.nameZh : s.nameEn}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Story Banner */}
-          <div style={{
-            background: sc.bgColor,
-            border: '1px solid var(--border-light)',
-            borderLeft: '4px solid var(--gold)',
-            borderRadius: 'var(--r-md)',
-            padding: '0.75rem 1rem',
-            marginBottom: '1rem',
-            fontFamily: 'var(--font-body)',
-          }}>
-            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.35rem' }}>
-              {lang === 'zh' ? '題目情境' : 'Scenario'}
-            </div>
-            <div style={{ fontSize: 'clamp(0.78rem, 1.8vw, 0.88rem)', color: 'var(--text-primary)', lineHeight: 1.6 }}>
-              {lang === 'zh'
-                ? `從 ${cN} 人（含 ${cA} 位${sc.typeAZh} ${sc.emojiA} 及 ${cB} 位${sc.typeBZh} ${sc.emojiB}）中隨機選出 ${cR} 人，恰好有 ${cX} 位${sc.typeAZh}及 ${cY} 位${sc.typeBZh}的概率是？`
-                : `From ${cN} people (${cA} ${sc.typeAEn}s ${sc.emojiA} and ${cB} ${sc.typeBEn}s ${sc.emojiB}), ${cR} are randomly chosen. What is the probability of getting exactly ${cX} ${sc.typeAEn}(s) and ${cY} ${sc.typeBEn}(s)?`
-              }
-            </div>
-          </div>
-
-          {/* Step 2: Inputs */}
-          <div className="section-hd" style={{ marginBottom: '0.75rem' }}>
+          {/* Header */}
+          <div className="section-hd" style={{ marginBottom: '1rem' }}>
             <div className="section-hd-icon">🔢</div>
             <div>
-              <div className="section-hd-title">{lang === 'zh' ? '第二步：輸入數值' : 'Step 2: Enter Values'}</div>
-              <div className="section-hd-desc">{lang === 'zh' ? '設定總人數及各類型的數量' : 'Set total count and group sizes'}</div>
-            </div>
-          </div>
-
-          {/* Total n and r */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.5rem, 1.5vw, 0.85rem)', marginBottom: '0.85rem' }}>
-            <div>
-              <label className="input-label">{lang === 'zh' ? 'Total n' : 'Total n'}</label>
-              <input type="number" min={1} value={cN}
-                onChange={e => setCN(Math.max(1, parseInt(e.target.value) || 1))}
-                className="input-field" />
-            </div>
-            <div>
-              <label className="input-label">{lang === 'zh' ? '選出 r 人' : 'Select r'}</label>
-              <input type="number" min={1} value={cR}
-                onChange={e => setCR(Math.max(1, parseInt(e.target.value) || 1))}
-                className="input-field" />
-            </div>
-          </div>
-
-          {/* Type A and B */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'clamp(0.5rem, 1.5vw, 0.85rem)', marginBottom: '0.85rem' }}>
-            <div className="card-flat" style={{ padding: 'clamp(0.65rem, 2vw, 1rem)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--gold)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem', fontFamily: 'var(--font-body)' }}>
-                {sc.emojiA} {lang === 'zh' ? sc.typeAZh : sc.typeAEn}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div>
-                  <label className="input-label">{lang === 'zh' ? `${sc.typeAZh}總數 a` : `Total ${sc.typeAEn}s (a)`}</label>
-                  <input type="number" min={0} value={cA}
-                    onChange={e => setCA(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="input-field" />
-                </div>
-                <div>
-                  <label className="input-label">{lang === 'zh' ? `選 x 位${sc.typeAZh}` : `Select x ${sc.typeAEn}s`}</label>
-                  <input type="number" min={0} value={cX}
-                    onChange={e => setCX(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="input-field" />
-                </div>
-              </div>
-            </div>
-            <div className="card-flat" style={{ padding: 'clamp(0.65rem, 2vw, 1rem)' }}>
-              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--navy-light)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem', fontFamily: 'var(--font-body)' }}>
-                {sc.emojiB} {lang === 'zh' ? sc.typeBZh : sc.typeBEn}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                <div>
-                  <label className="input-label">{lang === 'zh' ? `${sc.typeBZh}總數 b` : `Total ${sc.typeBEn}s (b)`}</label>
-                  <input type="number" min={0} value={cB}
-                    onChange={e => setCB(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="input-field" />
-                </div>
-                <div>
-                  <label className="input-label">{lang === 'zh' ? `選 y 位${sc.typeBZh}` : `Select y ${sc.typeBEn}s`}</label>
-                  <input type="number" min={0} value={cY}
-                    onChange={e => setCY(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="input-field" />
-                </div>
+              <div className="section-hd-title">{lang === 'zh' ? '建立概率算式' : 'Build Probability Expression'}</div>
+              <div className="section-hd-desc">
+                {lang === 'zh'
+                  ? '在分子和分母各加入 n!、P(n,r) 或 C(n,r) 項目，可混合使用'
+                  : 'Add n!, P(n,r), or C(n,r) terms to numerator and denominator — mix freely'}
               </div>
             </div>
           </div>
 
-          {/* Constraint hint */}
+          {/* Tip */}
           <div style={{
-            fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)',
-            marginBottom: '0.85rem', padding: '0.5rem 0.75rem',
-            background: 'var(--bg-section)', borderRadius: 'var(--r-sm)',
-            border: '1px solid var(--border-light)',
+            background: 'rgba(107,155,210,0.06)',
+            border: '1px solid rgba(107,155,210,0.2)',
+            borderLeft: '4px solid var(--navy-light)',
+            borderRadius: 'var(--r-md)',
+            padding: '0.6rem 0.85rem',
+            marginBottom: '1rem',
+            fontSize: '0.75rem',
+            color: 'var(--text-secondary)',
+            fontFamily: 'var(--font-body)',
+            lineHeight: 1.6,
           }}>
             {lang === 'zh'
-              ? `⚠️ 注意：x + y 必須等於 r（目前：${cX} + ${cY} = ${cX + cY}，r = ${cR}）`
-              : `⚠️ Note: x + y must equal r (currently: ${cX} + ${cY} = ${cX + cY}, r = ${cR})`
-            }
+              ? '💡 例如：P = C(5,2)×C(5,1) / C(10,3)　或　P = P(4,2)×3! / 5!　或　P = C(6,2)×P(4,1) / P(10,3)'
+              : '💡 e.g. P = C(5,2)×C(5,1)/C(10,3)  or  P = P(4,2)×3!/5!  or  P = C(6,2)×P(4,1)/P(10,3)'}
           </div>
 
-          <button onClick={calculate} className="btn-primary">
+          {/* Numerator */}
+          <TermListBuilder
+            label={lang === 'zh' ? '分子（有利結果數）' : 'Numerator (favourable)'}
+            terms={numTerms}
+            onChange={t => { setNumTerms(t); setProbResult(null); setError(''); }}
+            lang={lang}
+            accentColor="var(--gold)"
+          />
+
+          {/* Divider */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem',
+            margin: '0.5rem 0 0.85rem',
+          }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontFamily: 'var(--font-body)', fontWeight: 600 }}>÷</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border-light)' }} />
+          </div>
+
+          {/* Denominator */}
+          <TermListBuilder
+            label={lang === 'zh' ? '分母（總結果數）' : 'Denominator (total)'}
+            terms={denTerms}
+            onChange={t => { setDenTerms(t); setProbResult(null); setError(''); }}
+            lang={lang}
+            accentColor="var(--teal)"
+          />
+
+          <button onClick={calculate} className="btn-primary" style={{ marginTop: '0.5rem' }}>
             {lang === 'zh' ? '計算概率' : 'Calculate Probability'}
           </button>
         </div>
@@ -519,9 +571,7 @@ export default function ProbabilityPage() {
             <FractionInput label={t.inputPBgivenA} num={pBgANum} den={pBgADen} onNum={setPBgANum} onDen={setPBgADen} />
             <FractionInput label={t.inputPBgivenAc} num={pBgAcNum} den={pBgAcDen} onNum={setPBgAcNum} onDen={setPBgAcDen} />
           </div>
-          <button onClick={calculate} className="btn-primary">
-            {lang === 'zh' ? '計算' : 'Calculate'}
-          </button>
+          <button onClick={calculate} className="btn-primary">{lang === 'zh' ? '計算' : 'Calculate'}</button>
         </div>
       )}
 
@@ -529,64 +579,33 @@ export default function ProbabilityPage() {
       {error && (
         <div style={{
           background: 'var(--red-light)', border: '1px solid rgba(192,57,43,0.25)',
-          borderLeft: '4px solid var(--red)',
-          borderRadius: 'var(--r-md)', padding: '0.75rem 1rem',
-          color: 'var(--red)', fontSize: 'clamp(0.78rem, 1.8vw, 0.88rem)',
-          fontFamily: 'var(--font-body)', marginBottom: '0.75rem',
-        }}>
-          ⚠️ {error}
-        </div>
+          borderLeft: '4px solid var(--red)', borderRadius: 'var(--r-md)',
+          padding: '0.75rem 1rem', color: 'var(--red)',
+          fontSize: 'clamp(0.78rem, 1.8vw, 0.88rem)', fontFamily: 'var(--font-body)', marginBottom: '0.75rem',
+        }}>⚠️ {error}</div>
       )}
 
-      {/* ── Simple / Comb Result ── */}
+      {/* ── Result ── */}
       {probResult && (
         <div className="card" style={{ padding: 'clamp(1rem, 3vw, 1.5rem)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-            <div style={{
-              width: 6, height: 28, background: 'var(--teal)',
-              borderRadius: 3, flexShrink: 0,
-            }} />
+            <div style={{ width: 6, height: 28, background: 'var(--teal)', borderRadius: 3, flexShrink: 0 }} />
             <span style={{ fontSize: 'clamp(0.7rem, 1.4vw, 0.78rem)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', fontFamily: 'var(--font-body)' }}>
               {t.labelProbResult}
             </span>
           </div>
-
-          {/* Story result summary for comb mode */}
-          {mode === 'comb' && (
-            <div style={{
-              background: sc.bgColor,
-              border: '1px solid var(--border-light)',
-              borderLeft: '4px solid var(--teal)',
-              borderRadius: 'var(--r-md)',
-              padding: '0.65rem 0.9rem',
-              marginBottom: '0.85rem',
-              fontSize: 'clamp(0.75rem, 1.7vw, 0.85rem)',
-              color: 'var(--text-primary)',
-              fontFamily: 'var(--font-body)',
-              lineHeight: 1.6,
-            }}>
-              {lang === 'zh'
-                ? `${sc.emojiA} ${sc.typeAZh} × ${cX} 人 + ${sc.emojiB} ${sc.typeBZh} × ${cY} 人，從 ${cN} 人中選 ${cR} 人`
-                : `${sc.emojiA} ${cX} ${sc.typeAEn}(s) + ${sc.emojiB} ${cY} ${sc.typeBEn}(s), choosing ${cR} from ${cN}`
-              }
-            </div>
-          )}
-
           <div className="formula-box" style={{ marginBottom: '0.85rem' }}>
             <KatexRenderer display latex={`\\displaystyle ${probResult.latex}`} />
             <div style={{ fontSize: 'clamp(0.72rem, 1.5vw, 0.8rem)', color: 'var(--text-muted)', marginTop: '0.4rem', fontFamily: 'var(--font-body)' }}>
               {t.labelDecimal}：<span style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)', fontWeight: 600 }}>{probResult.decimal}</span>
             </div>
           </div>
-
           <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.85rem' }}>
             <div style={{ fontSize: 'clamp(0.68rem, 1.3vw, 0.75rem)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem', fontFamily: 'var(--font-body)' }}>
               {t.labelSteps}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-              {probResult.steps.map((step, i) => (
-                <StepCard key={i} latex={step} index={i} />
-              ))}
+              {probResult.steps.map((step, i) => <StepCard key={i} latex={step} index={i} />)}
             </div>
           </div>
         </div>
@@ -602,22 +621,16 @@ export default function ProbabilityPage() {
                 {t.labelBayesFormula}
               </span>
             </div>
-            <button
-              onClick={() => setShowTree(s => !s)}
-              className="btn-ghost"
-            >
+            <button onClick={() => setShowTree(s => !s)} className="btn-ghost">
               🌳 {t.labelTree} {showTree ? '▲' : '▼'}
             </button>
           </div>
-
           <div className="formula-box" style={{ marginBottom: '0.85rem' }}>
             <KatexRenderer display latex={`\\displaystyle ${bayesResult.latex}`} />
             <div style={{ fontSize: 'clamp(0.72rem, 1.5vw, 0.8rem)', color: 'var(--text-muted)', marginTop: '0.4rem', fontFamily: 'var(--font-body)' }}>
               {t.labelDecimal}：<span style={{ fontFamily: 'var(--font-mono)', color: 'var(--teal)', fontWeight: 600 }}>{bayesResult.decimal}</span>
             </div>
           </div>
-
-          {/* Tree Diagram */}
           {showTree && (
             <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.85rem', marginBottom: '0.85rem' }}>
               <div style={{ fontSize: 'clamp(0.68rem, 1.3vw, 0.75rem)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem', fontFamily: 'var(--font-body)' }}>
@@ -628,20 +641,14 @@ export default function ProbabilityPage() {
               </div>
             </div>
           )}
-
-          {/* Steps */}
           <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '0.85rem', marginBottom: '0.85rem' }}>
             <div style={{ fontSize: 'clamp(0.68rem, 1.3vw, 0.75rem)', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.6rem', fontFamily: 'var(--font-body)' }}>
               {t.labelSteps}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-              {bayesResult.steps.map((step, i) => (
-                <StepCard key={i} latex={step} index={i} />
-              ))}
+              {bayesResult.steps.map((step, i) => <StepCard key={i} latex={step} index={i} />)}
             </div>
           </div>
-
-          {/* Bayes formula reminder */}
           <div className="card-teal" style={{ padding: 'clamp(0.75rem, 2vw, 1rem)' }}>
             <div style={{ fontSize: 'clamp(0.68rem, 1.3vw, 0.75rem)', fontWeight: 700, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '0.5rem', fontFamily: 'var(--font-body)' }}>
               {t.labelBayesFormula}

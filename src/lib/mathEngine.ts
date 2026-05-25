@@ -376,3 +376,134 @@ export function generateQuestion(type: QuestionType): PracticeQuestion {
     }
   }
 }
+
+// ============================================================
+// Flexible Expression Engine
+// Supports: n!, P(n,r), C(n,r) and mixed products of these
+// Used by: ProbabilityPage comb mode, PCPage
+// ============================================================
+
+/** A single term in a flexible expression */
+export type TermType = 'factorial' | 'permutation' | 'combination';
+
+export interface ExprTerm {
+  type: TermType;
+  n: number;
+  r?: number; // required for permutation and combination
+}
+
+/** Evaluate a single term to its numeric value */
+export function evalTerm(t: ExprTerm): number {
+  switch (t.type) {
+    case 'factorial':
+      return factorial(t.n);
+    case 'permutation': {
+      const r = t.r ?? 0;
+      if (r > t.n) throw new Error(`P(${t.n},${r}): r cannot exceed n`);
+      return factorial(t.n) / factorial(t.n - r);
+    }
+    case 'combination': {
+      const r = t.r ?? 0;
+      if (r > t.n) throw new Error(`C(${t.n},${r}): r cannot exceed n`);
+      return factorial(t.n) / (factorial(r) * factorial(t.n - r));
+    }
+  }
+}
+
+/** Render a single term as LaTeX */
+export function termToLatex(t: ExprTerm): string {
+  switch (t.type) {
+    case 'factorial':
+      return `${t.n}!`;
+    case 'permutation':
+      return `P^{${t.n}}_{${t.r ?? 0}}`;
+    case 'combination':
+      return `C^{${t.n}}_{${t.r ?? 0}}`;
+  }
+}
+
+/** Evaluate a product of terms (numerator or denominator) */
+export function evalTermList(terms: ExprTerm[]): number {
+  if (terms.length === 0) return 1;
+  return terms.reduce((acc, t) => acc * evalTerm(t), 1);
+}
+
+/** Render a product of terms as LaTeX (joined by x) */
+export function termListToLatex(terms: ExprTerm[]): string {
+  if (terms.length === 0) return '1';
+  return terms.map(termToLatex).join(' \\times ');
+}
+
+/**
+ * Flexible P&C probability:
+ *   P = (product of numerator terms) / (product of denominator terms)
+ * Returns full ProbResult with step-by-step LaTeX derivation.
+ */
+export function flexibleProbability(
+  numeratorTerms: ExprTerm[],
+  denominatorTerms: ExprTerm[],
+): ProbResult {
+  const numVal = evalTermList(numeratorTerms);
+  const denVal = evalTermList(denominatorTerms);
+  if (denVal === 0) throw new Error('Denominator evaluates to 0');
+  const f = simplify(numVal, denVal);
+
+  const numLatex = termListToLatex(numeratorTerms);
+  const denLatex = termListToLatex(denominatorTerms);
+
+  const numExpanded = numeratorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
+  const denExpanded = denominatorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
+
+  const steps: string[] = [
+    `\\displaystyle P = \\frac{${numLatex}}{${denLatex}}`,
+    `\\displaystyle = \\frac{${numExpanded}}{${denExpanded}}`,
+    `\\displaystyle = \\frac{${numVal.toLocaleString()}}{${denVal.toLocaleString()}} = ${fracToLatex(f)}`,
+  ];
+
+  return {
+    fraction: f,
+    latex: `P = ${fracToLatex(f)}`,
+    steps,
+    decimal: fracToDecimal(f),
+  };
+}
+
+/**
+ * Flexible P&C count (for PCPage):
+ *   result = (product of numerator terms) / (product of denominator terms)
+ * Returns value + LaTeX steps.
+ */
+export function flexibleCount(
+  numeratorTerms: ExprTerm[],
+  denominatorTerms: ExprTerm[],
+): { value: number; latex: string; steps: string[] } {
+  const numVal = evalTermList(numeratorTerms);
+  const denVal = denominatorTerms.length > 0 ? evalTermList(denominatorTerms) : 1;
+  if (denVal === 0) throw new Error('Denominator evaluates to 0');
+  const value = numVal / denVal;
+
+  const numLatex = termListToLatex(numeratorTerms);
+  const denLatex = denominatorTerms.length > 0 ? termListToLatex(denominatorTerms) : '';
+
+  const numExpanded = numeratorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
+  const denExpanded = denominatorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
+
+  const fracLatex = denLatex
+    ? `\\dfrac{${numLatex}}{${denLatex}}`
+    : numLatex;
+  const fracExpanded = denLatex
+    ? `\\dfrac{${numExpanded}}{${denExpanded}}`
+    : numExpanded;
+
+  const steps: string[] = [
+    `\\displaystyle ${fracLatex}`,
+    `\\displaystyle = ${fracExpanded}`,
+    `\\displaystyle = ${value.toLocaleString()}`,
+  ];
+
+  return {
+    value,
+    latex: `${fracLatex} = ${value.toLocaleString()}`,
+    steps,
+  };
+}

@@ -16,8 +16,14 @@ import KatexRenderer from '../components/KatexRenderer';
 import {
   factorial,
   generateQuestion,
+  flexibleCount,
+  evalTerm,
+  termToLatex,
+  evalTermList,
   type PracticeQuestion,
   type QuestionType,
+  type ExprTerm,
+  type TermType,
 } from '../lib/mathEngine';
 
 // ── Types ──────────────────────────────────────────────────
@@ -804,6 +810,260 @@ function PracticeMode({ lang }: { lang: string }) {
   );
 }
 
+// ── Free Calc Mode ────────────────────────────────────────
+function FreeCalcTermRow({
+  term, index, onUpdate, onRemove, lang,
+}: {
+  term: ExprTerm; index: number;
+  onUpdate: (i: number, t: ExprTerm) => void;
+  onRemove: (i: number) => void;
+  lang: string;
+}) {
+  const typeLabel: Record<TermType, string> = {
+    factorial: 'n!',
+    permutation: lang === 'zh' ? 'P(n,r) 排列' : 'P(n,r) Perm',
+    combination: lang === 'zh' ? 'C(n,r) 組合' : 'C(n,r) Comb',
+  };
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: '0.5rem',
+      background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)',
+      borderRadius: 'var(--r-md)', padding: '0.5rem 0.65rem', flexWrap: 'wrap',
+    }}>
+      <select value={term.type}
+        onChange={e => {
+          const nt = e.target.value as TermType;
+          onUpdate(index, { ...term, type: nt, r: nt === 'factorial' ? undefined : (term.r ?? 1) });
+        }}
+        style={{
+          padding: '0.25rem 0.4rem', borderRadius: 'var(--r-sm)',
+          border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)',
+          color: 'var(--text-primary)', fontSize: '0.75rem', cursor: 'pointer',
+        }}>
+        {(['factorial', 'permutation', 'combination'] as TermType[]).map(t => (
+          <option key={t} value={t}>{typeLabel[t]}</option>
+        ))}
+      </select>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>n=</span>
+        <input type="number" min={0} max={20} value={term.n}
+          onChange={e => onUpdate(index, { ...term, n: Math.max(0, Math.min(20, parseInt(e.target.value) || 0)) })}
+          style={{
+            width: 44, padding: '0.25rem 0.35rem', borderRadius: 'var(--r-sm)',
+            border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)',
+            color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'center',
+          }} />
+      </div>
+      {term.type !== 'factorial' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>r=</span>
+          <input type="number" min={0} max={term.n} value={term.r ?? 0}
+            onChange={e => onUpdate(index, { ...term, r: Math.max(0, Math.min(term.n, parseInt(e.target.value) || 0)) })}
+            style={{
+              width: 44, padding: '0.25rem 0.35rem', borderRadius: 'var(--r-sm)',
+              border: '1px solid var(--border)', background: 'rgba(255,255,255,0.06)',
+              color: 'var(--text-primary)', fontSize: '0.8rem', textAlign: 'center',
+            }} />
+        </div>
+      )}
+      <div style={{
+        flex: 1, minWidth: 60, padding: '0.2rem 0.4rem',
+        background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-light)',
+        borderRadius: 'var(--r-sm)', overflow: 'hidden',
+      }}>
+        <KatexRenderer latex={`\\displaystyle ${termToLatex(term)}`} display={false} />
+      </div>
+      <div style={{ fontSize: '0.72rem', color: 'var(--gold)', fontWeight: 600, minWidth: 36, textAlign: 'right' }}>
+        {(() => { try { return '= ' + evalTerm(term).toLocaleString(); } catch { return '—'; } })()}
+      </div>
+      <button onClick={() => onRemove(index)}
+        style={{
+          width: 22, height: 22, borderRadius: '50%',
+          background: 'rgba(192,57,43,0.15)', border: '1px solid rgba(192,57,43,0.3)',
+          color: '#e74c3c', cursor: 'pointer', fontSize: '0.75rem',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        }}>×</button>
+    </div>
+  );
+}
+
+function FreeCalcTermList({
+  label, terms, onChange, lang, accentColor,
+}: {
+  label: string; terms: ExprTerm[];
+  onChange: (t: ExprTerm[]) => void;
+  lang: string; accentColor: string;
+}) {
+  const addTerm = (type: TermType) =>
+    onChange([...terms, { type, n: 5, r: type === 'factorial' ? undefined : 2 }]);
+  const updateTerm = (i: number, t: ExprTerm) => { const n = [...terms]; n[i] = t; onChange(n); };
+  const removeTerm = (i: number) => onChange(terms.filter((_, idx) => idx !== i));
+  let productVal = 1; let productErr = '';
+  try { productVal = evalTermList(terms); } catch (e: unknown) { productErr = e instanceof Error ? e.message : 'Error'; }
+  return (
+    <div style={{ marginBottom: '0.85rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ width: 4, height: 16, background: accentColor, borderRadius: 2 }} />
+          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--gold-bright)' }}>{label}</span>
+          {terms.length > 0 && !productErr && (
+            <span style={{ fontSize: '0.72rem', color: 'var(--gold)', fontWeight: 600 }}>= {productVal.toLocaleString()}</span>
+          )}
+          {productErr && <span style={{ fontSize: '0.68rem', color: '#e74c3c' }}>⚠️ {productErr}</span>}
+        </div>
+        <div style={{ display: 'flex', gap: '0.3rem' }}>
+          {(['factorial', 'permutation', 'combination'] as TermType[]).map(t => (
+            <button key={t} onClick={() => addTerm(t)}
+              style={{
+                padding: '0.2rem 0.5rem', borderRadius: 'var(--r-sm)',
+                border: `1px solid ${accentColor}50`, background: `${accentColor}18`,
+                color: accentColor, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer',
+              }}>
+              + {t === 'factorial' ? 'n!' : t === 'permutation' ? 'P(n,r)' : 'C(n,r)'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {terms.length === 0 ? (
+        <div style={{
+          padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.03)',
+          border: '1px dashed var(--border)', borderRadius: 'var(--r-md)',
+          fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center',
+        }}>{lang === 'zh' ? '點擊上方按鈕加入項目' : 'Click buttons above to add terms'}</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+          {terms.map((t, i) => (
+            <FreeCalcTermRow key={i} term={t} index={i} onUpdate={updateTerm} onRemove={removeTerm} lang={lang} />
+          ))}
+          {terms.length > 1 && (
+            <div style={{ padding: '0.3rem 0.6rem', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border-light)', borderRadius: 'var(--r-sm)', overflowX: 'auto' }}>
+              <KatexRenderer display={false} latex={`\\displaystyle ${terms.map(t => termToLatex(t)).join(' \\times ')}`} />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FreeCalcMode({ lang }: { lang: string }) {
+  const zh = (z: string, e: string) => lang === 'zh' ? z : e;
+  const [numTerms, setNumTerms] = useState<ExprTerm[]>([{ type: 'permutation', n: 5, r: 3 }]);
+  const [denTerms, setDenTerms] = useState<ExprTerm[]>([]);
+  const [result, setResult] = useState<{ value: number; latex: string; steps: string[] } | null>(null);
+  const [error, setError] = useState('');
+
+  const calculate = () => {
+    setError(''); setResult(null);
+    if (numTerms.length === 0) { setError(zh('請在分子加入至少一個項目', 'Add at least one term to the numerator')); return; }
+    try { setResult(flexibleCount(numTerms, denTerms)); }
+    catch (e: unknown) { setError(e instanceof Error ? e.message : 'Error'); }
+  };
+
+  // Live formula preview
+  const numL = numTerms.length > 0 ? numTerms.map(t => termToLatex(t)).join(' \\times ') : '?';
+  const denL = denTerms.length > 0 ? denTerms.map(t => termToLatex(t)).join(' \\times ') : '';
+  const previewLatex = denL ? `\\dfrac{${numL}}{${denL}}` : numL;
+
+  return (
+    <div className="glass-card animate-fade-in" style={{ padding: '1.5rem', marginTop: '1.5rem' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+        <div style={{ fontSize: '1.5rem' }}>🔢</div>
+        <div>
+          <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1rem', color: 'var(--gold-bright)', fontWeight: 600 }}>
+            {zh('自由計算模式', 'Free Calculation Mode')}
+          </h3>
+          <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+            {zh('自由組合 n!、P(n,r)、C(n,r)，支援混合算式', 'Mix n!, P(n,r), C(n,r) freely — numerator ÷ denominator')}
+          </p>
+        </div>
+      </div>
+
+      {/* Live formula preview */}
+      <div className="formula-box" style={{ marginBottom: '1rem' }}>
+        <KatexRenderer display latex={`\\displaystyle ${previewLatex}`} />
+      </div>
+
+      {/* Tip */}
+      <div style={{
+        background: 'rgba(212,168,67,0.06)', border: '1px solid rgba(212,168,67,0.2)',
+        borderLeft: '4px solid var(--gold)', borderRadius: 'var(--r-md)',
+        padding: '0.6rem 0.85rem', marginBottom: '1rem',
+        fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: 1.6,
+      }}>
+        {zh(
+          '💡 例如：5! × C(4,2)　或　P(6,3) / 2!　或　C(5,2) × P(3,2) / C(8,4)',
+          '💡 e.g. 5! × C(4,2)  or  P(6,3) / 2!  or  C(5,2) × P(3,2) / C(8,4)',
+        )}
+      </div>
+
+      {/* Numerator */}
+      <FreeCalcTermList
+        label={zh('分子（Numerator）', 'Numerator')}
+        terms={numTerms}
+        onChange={t => { setNumTerms(t); setResult(null); setError(''); }}
+        lang={lang}
+        accentColor="var(--gold)"
+      />
+
+      {/* Divider */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0.5rem 0 0.85rem' }}>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>÷ {zh('（選填）', '(optional)')}</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+      </div>
+
+      {/* Denominator */}
+      <FreeCalcTermList
+        label={zh('分母（Denominator，選填）', 'Denominator (optional)')}
+        terms={denTerms}
+        onChange={t => { setDenTerms(t); setResult(null); setError(''); }}
+        lang={lang}
+        accentColor="#7ec8a4"
+      />
+
+      <button className="btn-primary" onClick={calculate} style={{ marginTop: '0.5rem' }}>
+        {zh('計算', 'Calculate')}
+      </button>
+
+      {error && (
+        <div style={{
+          marginTop: '0.75rem', padding: '0.6rem 0.85rem',
+          background: 'rgba(192,57,43,0.12)', border: '1px solid rgba(192,57,43,0.3)',
+          borderLeft: '4px solid #e74c3c', borderRadius: 'var(--r-md)',
+          fontSize: '0.8rem', color: '#e74c3c',
+        }}>⚠️ {error}</div>
+      )}
+
+      {result && (
+        <div style={{ marginTop: '1rem' }}>
+          {/* Big answer */}
+          <div className="result-box animate-pop" style={{ marginBottom: '1rem', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--gold)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+              {zh('答案', 'Answer')}
+            </div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '2.8rem', fontWeight: 700, color: 'var(--gold-bright)', lineHeight: 1 }}>
+              {result.value.toLocaleString()}
+            </div>
+          </div>
+          {/* Steps */}
+          <div className="glass-card" style={{ padding: '1.25rem' }}>
+            <h3 style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '1rem' }}>
+              {zh('解題步驟', 'Step-by-Step Solution')}
+            </h3>
+            {result.steps.map((s, i) => (
+              <div key={i} className="step-item animate-slide-in" style={{ animationDelay: `${i * 0.06}s` }}>
+                <div className="step-num">{i + 1}</div>
+                <div style={{ flex: 1 }}><KatexRenderer latex={s} display /></div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────
 export default function PCPage() {
   const { lang } = useLang();
@@ -820,6 +1080,7 @@ export default function PCPage() {
   const [exactlyVal, setExactlyVal] = useState(1);
   const [result, setResult] = useState<CalcResult | null>(null);
   const [showPractice, setShowPractice] = useState(false);
+  const [showFreeCalc, setShowFreeCalc] = useState(false);
 
   const scenario = SCENARIOS[scenarioKey];
   const zh = (zh: string, en: string) => lang === 'zh' ? zh : en;
@@ -1418,11 +1679,15 @@ export default function PCPage() {
             <button className="btn-secondary" onClick={() => setStep(4)}>
               ← {zh('修改條件', 'Edit Constraints')}
             </button>
-            <button className="btn-ghost" onClick={() => setShowPractice(!showPractice)}>
+                        <button className="btn-ghost" onClick={() => setShowPractice(!showPractice)}>
               🎯 {zh('隨機練習題', 'Practice Questions')}
             </button>
+            <button className="btn-ghost" onClick={() => setShowFreeCalc(!showFreeCalc)}>
+              🔢 {zh('自由計算', 'Free Calc')}
+            </button>
           </div>
-
+          {/* Free Calc Mode */}
+          {showFreeCalc && <FreeCalcMode lang={lang} />}
           {/* Practice Mode */}
           {showPractice && <PracticeMode lang={lang} />}
         </div>
