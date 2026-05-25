@@ -17,6 +17,46 @@ import {
 
 type Mode = 'single' | 'comb' | 'bayes';
 
+// ── Scenario Data (same as PCPage) ──────────────────────────────
+type ScenarioKey = 'office' | 'school' | 'restaurant' | 'family';
+interface ProbScenario {
+  nameZh: string; nameEn: string;
+  emojiA: string; emojiB: string;
+  typeAZh: string; typeAEn: string;
+  typeBZh: string; typeBEn: string;
+  bgColor: string;
+}
+const PROB_SCENARIOS: Record<ScenarioKey, ProbScenario> = {
+  office: {
+    nameZh: '辦公室選拔', nameEn: 'Office Selection',
+    emojiA: '👔', emojiB: '💼',
+    typeAZh: '經理', typeAEn: 'Manager',
+    typeBZh: '員工', typeBEn: 'Staff',
+    bgColor: 'rgba(212,168,67,0.04)',
+  },
+  school: {
+    nameZh: '影畢業相', nameEn: 'Graduation Photo',
+    emojiA: '👨‍🏫', emojiB: '🧑‍🎓',
+    typeAZh: '老師', typeAEn: 'Teacher',
+    typeBZh: '學生', typeBEn: 'Student',
+    bgColor: 'rgba(107,155,210,0.04)',
+  },
+  restaurant: {
+    nameZh: '茶餐廳點菜', nameEn: 'Cha Chaan Teng',
+    emojiA: '🍛', emojiB: '🥤',
+    typeAZh: '主食', typeAEn: 'Main Dish',
+    typeBZh: '飲品', typeBEn: 'Drink',
+    bgColor: 'rgba(126,200,164,0.04)',
+  },
+  family: {
+    nameZh: '家庭聚餐', nameEn: 'Family Gathering',
+    emojiA: '👨', emojiB: '👦',
+    typeAZh: '成人', typeAEn: 'Adult',
+    typeBZh: '兒童', typeBEn: 'Child',
+    bgColor: 'rgba(224,112,112,0.04)',
+  },
+};
+
 function gcd(a: number, b: number): number {
   while (b) { [a, b] = [b, a % b]; }
   return a;
@@ -370,6 +410,9 @@ export default function ProbabilityPage() {
   const [fav, setFav] = useState(3);
   const [total, setTotal] = useState(10);
 
+  // Scenario
+  const [scenarioKey, setScenarioKey] = useState<ScenarioKey>('school');
+
   // Flexible comb prob
   const [numTerms, setNumTerms] = useState<ExprTerm[]>([
     { type: 'combination', n: 5, r: 2 },
@@ -491,11 +534,67 @@ export default function ProbabilityPage() {
       {/* ── Flexible P&C Probability Inputs ── */}
       {mode === 'comb' && (
         <div className="card" style={{ padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
-          {/* Header */}
-          <div className="section-hd" style={{ marginBottom: '1rem' }}>
+
+          {/* Step 1: Scenario Selector */}
+          <div className="section-hd" style={{ marginBottom: '0.85rem' }}>
+            <div className="section-hd-icon">🎭</div>
+            <div>
+              <div className="section-hd-title">{lang === 'zh' ? '第一步：選擇情境' : 'Step 1: Choose a Scenario'}</div>
+              <div className="section-hd-desc">{lang === 'zh' ? '選一個生活化情境，讓題目更直觀' : 'Pick a context to make the question more concrete'}</div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
+            {(Object.entries(PROB_SCENARIOS) as [ScenarioKey, ProbScenario][]).map(([key, sc]) => (
+              <div key={key} onClick={() => setScenarioKey(key)}
+                style={{
+                  padding: '0.75rem 0.6rem', borderRadius: 'var(--r-lg)',
+                  border: `2px solid ${scenarioKey === key ? 'var(--navy)' : 'var(--border-light)'}`,
+                  background: scenarioKey === key ? 'rgba(26,43,77,0.07)' : sc.bgColor,
+                  cursor: 'pointer', transition: 'all 0.18s',
+                  textAlign: 'center',
+                }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.3rem' }}>{sc.emojiA}{sc.emojiB}</div>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: scenarioKey === key ? 'var(--navy)' : 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>
+                  {lang === 'zh' ? sc.nameZh : sc.nameEn}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Story Banner */}
+          {(() => {
+            const sc = PROB_SCENARIOS[scenarioKey];
+            const numVal = numTerms.length > 0 ? numTerms.reduce((acc, t) => { try { return acc * (t.type === 'factorial' ? (t.n === 0 ? 1 : Array.from({length: t.n}, (_, i) => i + 1).reduce((a, b) => a * b, 1)) : (t.type === 'combination' ? (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v = v * (t.n - i) / (i + 1); return Math.round(v); })() : (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v *= (t.n - i); return v; })())); } catch { return acc; } }, 1) : null;
+            const denVal = denTerms.length > 0 ? denTerms.reduce((acc, t) => { try { return acc * (t.type === 'factorial' ? (t.n === 0 ? 1 : Array.from({length: t.n}, (_, i) => i + 1).reduce((a, b) => a * b, 1)) : (t.type === 'combination' ? (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v = v * (t.n - i) / (i + 1); return Math.round(v); })() : (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v *= (t.n - i); return v; })())); } catch { return acc; } }, 1) : null;
+            const storyZh = lang === 'zh'
+              ? `📚 情境：${sc.nameZh} — 分子（${sc.emojiA}${sc.emojiB}有利結果）${numVal !== null ? ' = ' + numVal.toLocaleString() : ''}，分母（所有結果）${denVal !== null ? ' = ' + denVal.toLocaleString() : ''}`
+              : `📚 Scenario: ${sc.nameEn} — Numerator (${sc.emojiA}${sc.emojiB} favourable)${numVal !== null ? ' = ' + numVal.toLocaleString() : ''}, Denominator (total)${denVal !== null ? ' = ' + denVal.toLocaleString() : ''}`;
+            return (
+              <div style={{
+                background: 'rgba(212,168,67,0.06)',
+                border: '1px solid rgba(212,168,67,0.25)',
+                borderLeft: '4px solid var(--gold)',
+                borderRadius: 'var(--r-md)',
+                padding: '0.65rem 0.9rem',
+                marginBottom: '1rem',
+                fontSize: '0.78rem',
+                color: 'var(--text-primary)',
+                fontFamily: 'var(--font-body)',
+                lineHeight: 1.65,
+              }}>
+                <span style={{ fontWeight: 700, color: 'var(--gold)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {lang === 'zh' ? '題目情境' : 'Question Context'}
+                </span>
+                <div style={{ marginTop: '0.25rem' }}>{storyZh}</div>
+              </div>
+            );
+          })()}
+
+          {/* Step 2: Header */}
+          <div className="section-hd" style={{ marginBottom: '0.85rem' }}>
             <div className="section-hd-icon">🔢</div>
             <div>
-              <div className="section-hd-title">{lang === 'zh' ? '建立概率算式' : 'Build Probability Expression'}</div>
+              <div className="section-hd-title">{lang === 'zh' ? '第二步：建立概率算式' : 'Step 2: Build Probability Expression'}</div>
               <div className="section-hd-desc">
                 {lang === 'zh'
                   ? '在分子和分母各加入 n!、P(n,r) 或 C(n,r) 項目，可混合使用'
