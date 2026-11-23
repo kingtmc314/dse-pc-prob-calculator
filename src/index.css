@@ -5,7 +5,6 @@
    ============================================================ */
 
 @import "tailwindcss";
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'katex/dist/katex.min.css';
 
 /* ── CSS Variables ── */

@@ -30,3 +30,27 @@
   .ctx-module .ctx-gap-piece { gap: 3px; }
   .ctx-module .ctx-circle .ctx-token { width: 30px; height: 36px; }
 }
+
+/* Independent bundles and up to eight distinguishable story categories. */
+.ctx-module .ctx-category-0 { background: #fff4d4; border-color: #ccb05d; }
+.ctx-module .ctx-category-1 { background: #e4f1f9; border-color: #91b7cc; }
+.ctx-module .ctx-category-2 { background: #e9f4e4; border-color: #99b98c; }
+.ctx-module .ctx-category-3 { background: #f5e9f3; border-color: #bd9db8; }
+.ctx-module .ctx-category-4 { background: #fceadd; border-color: #c4a18b; }
+.ctx-module .ctx-category-5 { background: #e8e9f9; border-color: #a3a6c8; }
+.ctx-module .ctx-category-6 { background: #f9e6e8; border-color: #cb9a9f; }
+.ctx-module .ctx-category-7 { background: #e1f3ee; border-color: #8ebdb0; }
+.ctx-module .ctx-bundle-color-0 { --bundle-stroke: #ac7c18; --bundle-bg: #fff7df; }
+.ctx-module .ctx-bundle-color-1 { --bundle-stroke: #347f82; --bundle-bg: #e9f5f4; }
+.ctx-module .ctx-bundle-color-2 { --bundle-stroke: #8c609b; --bundle-bg: #f4ecf8; }
+.ctx-module .ctx-bundle-color-3 { --bundle-stroke: #b66e4a; --bundle-bg: #fff0e7; }
+.ctx-module .ctx-bundle[data-bundle-id] { border-color: var(--bundle-stroke); background: var(--bundle-bg); }
+.ctx-module .ctx-bundle-member { border: 2px solid var(--bundle-stroke); border-radius: 8px; padding: 3px; background: var(--bundle-bg); }
+.ctx-module .ctx-circle-position.ctx-bundle-member { padding: 1px; }
+.ctx-module .ctx-bundle-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 10px; }
+.ctx-module .ctx-bundle-legend > span { border: 1px solid var(--bundle-stroke); background: var(--bundle-bg); color: var(--text-primary); border-radius: 6px; padding: 3px 7px; font-size: .7rem; }
+
+.ctx-module .ctx-circle-dense .ctx-token { width: 28px; height: 30px; }
+.ctx-module .ctx-circle-dense .ctx-emoji { font-size: .75rem; }
+.ctx-module .ctx-circle-dense .ctx-identity { font-size: .48rem; }
+.ctx-module .ctx-circle-dense .ctx-bundle-member { border-width: 1px; }

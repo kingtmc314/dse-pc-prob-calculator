@@ -45,35 +45,45 @@ export default function ContextAnimation({ model }: { model: ContextAnimationMod
     const item = items.get(itemId);
     if (!item) return <span className="ctx-placeholder" aria-label={tr('尚未填入的位置', 'Unfilled position')}>?</span>;
     return <motion.span key={itemId} layout={!reduced} layoutId={`${id}-item-${itemId}${(occurrences.get(itemId) ?? 0) > 1 ? `-comparison-${rowIndex}` : ''}`} transition={{ duration, ease: 'easeInOut' }}
-      className={`ca-token ctx-token ${item.category === 'A' ? 'ca-token-adult' : ''}`} data-item-id={itemId} data-category={item.category} aria-label={text(item.label)} title={text(item.label)}>
-      <span className="ctx-emoji" aria-hidden="true">{item.emoji}</span><span className="ctx-identity">{itemId.replace(/^([a-z]+)-(\d+)$/i, (_, prefix: string, number: string) => prefix[0].toUpperCase() + number)}</span>
+      className={`ca-token ctx-token ${item.category === 'A' ? 'ca-token-adult' : ''} ${item.colorIndex !== undefined ? `ctx-category-${item.colorIndex % 8}` : ''}`} data-item-id={itemId} data-category={item.category} aria-label={text(item.label)} title={text(item.label)}>
+      <span className="ctx-emoji" aria-hidden="true">{item.emoji}</span><span className="ctx-identity">{item.shortLabel ?? itemId.replace(/^([a-z]+)-(\d+)$/i, (_, prefix: string, number: string) => prefix[0].toUpperCase() + number)}</span>
     </motion.span>;
   };
   const renderRow = (row: ContextRow, rowIndex: number) => {
     const style = row.style ?? 'pool';
     const highlight = new Set(row.highlightIds ?? []);
     const firstBundle = row.ids.findIndex(value => highlight.has(value));
+    const groups = row.bundleGroups ?? [];
+    const groupFor = (itemId: string) => groups.findIndex(group => group.ids.includes(itemId));
     return <div className={`ctx-row ctx-row-${style}`} key={rowIndex}>
       <p className="ca-row-label">{text(row.label)}</p>
-      {style === 'circle' ? <div className="ctx-circle" role="group" aria-label={text(row.label)}>{row.ids.map((itemId, index) => {
+      {style === 'circle' ? <div className={`ctx-circle ${row.ids.length > 12 ? 'ctx-circle-dense' : ''}`} role="group" aria-label={text(row.label)}>{row.ids.map((itemId, index) => {
         const angle = 2 * Math.PI * index / Math.max(1, row.ids.length) - Math.PI / 2;
-        return <div className="ctx-circle-position" style={{ left: `${50 + 40 * Math.cos(angle)}%`, top: `${50 + 40 * Math.sin(angle)}%` }} key={itemId}>{token(itemId, rowIndex)}</div>;
+        const groupIndex = groupFor(itemId);
+        return <div className={`ctx-circle-position ${groupIndex >= 0 ? `ctx-bundle-member ctx-bundle-color-${groupIndex % 4}` : ''}`} data-bundle-id={groupIndex >= 0 ? groups[groupIndex].id : undefined} style={{ left: `${50 + 40 * Math.cos(angle)}%`, top: `${50 + 40 * Math.sin(angle)}%` }} key={itemId}>{token(itemId, rowIndex)}</div>;
       })}<span className="ctx-circle-center">{tr('固定一個身份', 'Fix one identity')}</span></div> :
       <motion.div layout={!reduced} transition={{ duration }} className={`ctx-track ${style === 'team' ? 'ctx-team-track' : ''}`}>
         {style === 'gaps' ? Array.from({ length: row.ids.length + 1 }, (_, index) => <div className="ctx-gap-piece" key={index}>
           <span className={`ctx-gap ${row.gapIndices?.includes(index) ? 'ctx-gap-selected' : ''}`}><small>{index + 1}</small>{row.gapIndices?.includes(index) ? '✓' : '·'}</span>
           {index < row.ids.length && token(row.ids[index], rowIndex)}
         </div>) : row.ids.map((itemId, index) => {
+          const groupIndex = groupFor(itemId);
+          if (style === 'bundle' && groupIndex >= 0) {
+            const group = groups[groupIndex];
+            if (index !== row.ids.findIndex(value => group.ids.includes(value))) return null;
+            return <motion.div layout={!reduced} transition={{ duration }} className={`ctx-bundle ctx-bundle-color-${groupIndex % 4}`} data-bundle-id={group.id} key={group.id}><small>{text(group.label)}</small><div>{row.ids.filter(value => group.ids.includes(value)).map(value => token(value, rowIndex))}</div></motion.div>;
+          }
           if (style === 'bundle' && highlight.has(itemId)) {
             if (index !== firstBundle) return null;
             return <motion.div layout={!reduced} transition={{ duration }} className="ctx-bundle" key="bundle"><small>{tr('捆綁單元', 'One bundle')}</small><div>{row.ids.filter(value => highlight.has(value)).map(value => token(value, rowIndex))}</div></motion.div>;
           }
-          return style === 'line' || row.roles ? <div className={`ctx-position ${highlight.has(itemId) ? 'ctx-position-highlight' : ''}`} key={`${itemId || 'empty'}-${index}`}>
+          return style === 'line' || row.roles ? <div className={`ctx-position ${highlight.has(itemId) ? 'ctx-position-highlight' : ''} ${groupIndex >= 0 ? `ctx-bundle-member ctx-bundle-color-${groupIndex % 4}` : ''}`} data-bundle-id={groupIndex >= 0 ? groups[groupIndex].id : undefined} key={`${itemId || 'empty'}-${index}`}>
             <span className="ca-place-label">{row.roles?.[index] ? text(row.roles[index]) : tr(`第 ${index + 1} 位`, `Place ${index + 1}`)}</span>{token(itemId, rowIndex)}
           </div> : token(itemId, rowIndex);
         })}
         {!row.ids.length && <span className="ca-empty-note">{tr('此階段沒有物件在這裡', 'No objects here at this stage')}</span>}
       </motion.div>}
+      {groups.length > 0 && style !== 'bundle' && <div className="ctx-bundle-legend">{groups.map((group, index) => <span className={`ctx-bundle-color-${index % 4}`} key={group.id}>{text(group.label)}</span>)}</div>}
     </div>;
   };
   if (!current) return null;

@@ -1,5 +1,5 @@
 export interface AnimationCopy { zh: string; en: string }
-export interface ContextItem { id: string; label: AnimationCopy; emoji: string; category: 'A' | 'B' | 'generic' }
+export interface ContextItem { id: string; label: AnimationCopy; emoji: string; category: 'A' | 'B' | 'generic'; colorIndex?: number; shortLabel?: string }
 export interface ContextRow {
   label: AnimationCopy;
   ids: string[];
@@ -7,6 +7,7 @@ export interface ContextRow {
   highlightIds?: string[];
   roles?: AnimationCopy[];
   gapIndices?: number[];
+  bundleGroups?: { id: string; ids: string[]; label: AnimationCopy }[];
 }
 export interface ContextStep {
   title: AnimationCopy;

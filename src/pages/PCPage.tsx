@@ -14,6 +14,7 @@ import { useState, useCallback } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
 import ContextAnimation from '../components/ContextAnimation';
+import MultiStoryWizard from '../components/MultiStoryWizard';
 import { buildPCAnimation, findCategoryExample } from '../lib/pcAnimation';
 import ExpressionReasoning from '../components/ExpressionReasoning';
 import {
@@ -988,6 +989,7 @@ export default function PCPage() {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [showPractice, setShowPractice] = useState(false);
   const [showFreeCalc, setShowFreeCalc] = useState(false);
+  const [showMultiStory, setShowMultiStory] = useState(true);
   const [shownSteps,setShownSteps] = useState(1);
   const [showAnimation,setShowAnimation] = useState(false);
 
@@ -1032,11 +1034,13 @@ export default function PCPage() {
 
       <div className="page-header"><h1>{zh('排列與組合工作室', 'P & C workspace')}</h1><p>{zh('用故事建立模型，逐步理解每一項計數。', 'Build a model from a story and understand each counting step.')}</p></div>
       <div className="pc-modebar">
-        <button className={!showFreeCalc ? 'active' : ''} onClick={() => setShowFreeCalc(false)}>{zh('故事精靈 · 5 步', 'Story wizard · 5 steps')}</button>
+        <button className={showMultiStory && !showFreeCalc ? 'active' : ''} onClick={() => {setShowMultiStory(true);setShowFreeCalc(false);}}>{zh('多類故事 · 自訂身份', 'Multi-category · identities')}</button>
+        <button className={!showMultiStory && !showFreeCalc ? 'active' : ''} onClick={() => {setShowMultiStory(false);setShowFreeCalc(false);}}>{zh('雙類快捷 · 5 步', 'Two-category · 5 steps')}</button>
         <button className={showFreeCalc ? 'active' : ''} onClick={() => setShowFreeCalc(true)}>{zh('自由算式 · n! / nPr / nCr', 'Free Calc · n! / nPr / nCr')}</button>
       </div>
       {showFreeCalc && <FreeCalcMode lang={lang} />}
-      <div hidden={showFreeCalc}>
+      <div hidden={showFreeCalc || !showMultiStory}><MultiStoryWizard /></div>
+      <div hidden={showFreeCalc || showMultiStory}>
       {/* ── Step Wizard ── */}
       <div style={{ padding: '1.5rem 0 1.25rem' }}>
         <div className="step-wizard">

@@ -88,3 +88,6 @@ button:disabled { cursor:not-allowed; opacity:.55; }
 
 .dse-mobile-switch { display:none; }
 @media(max-width:700px) { .dse-mobile-switch { display:grid; grid-template-columns:1fr auto; gap:6px 10px; margin:16px 0; align-items:center; } .dse-mobile-switch label { grid-column:1/-1; font-size:12px; font-weight:700; color:var(--text-muted); } .dse-mobile-switch select { min-width:0; padding:10px; background:white; color:var(--navy); border:1px solid var(--border); border-radius:9px; font:600 13px var(--font-body); } .dse-mobile-switch>span { color:var(--teal); font-size:12px; font-weight:700; } .dse-workspace { order:0; } .dse-rail { order:1; } }
+
+.pc-modebar button { min-width: 0; overflow-wrap: anywhere; }
+@media(max-width:480px) { .pc-modebar { flex-wrap:wrap; } .pc-modebar button { flex:1 1 calc(50% - 8px); } .pc-modebar button:last-child { flex-basis:100%; padding:9px; } }
