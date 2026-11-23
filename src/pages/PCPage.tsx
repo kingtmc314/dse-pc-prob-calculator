@@ -13,7 +13,8 @@
 import { useState, useCallback } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
-import CountingAnimation from '../components/CountingAnimation';
+import ContextAnimation from '../components/ContextAnimation';
+import { buildPCAnimation, findCategoryExample } from '../lib/pcAnimation';
 import ExpressionReasoning from '../components/ExpressionReasoning';
 import {
   factorial,
@@ -532,169 +533,36 @@ function calculate(
 }
 
 // ── Emoji Stage Component ──────────────────────────────────
-function EmojiStage({
-  scenario, countA, countB, action, constraints, circular,
-}: {
-  scenario: Scenario; countA: number; countB: number;
-  action: Action; constraints: Constraint[]; circular: boolean;
+function EmojiStage({ scenario, countA, countB, action, constraints, circular }: {
+  scenario: Scenario; countA: number; countB: number; action: Action; constraints: Constraint[]; circular: boolean;
 }) {
-  const hasAdj = constraints.some(c => c.type === 'adjacent');
-  const hasNonAdj = constraints.some(c => c.type === 'non_adjacent');
-  const hasFixedEnds = constraints.some(c => c.type === 'fixed_ends');
-  const hasFixedHead = constraints.some(c => c.type === 'fixed_head');
-  const hasFixedTail = constraints.some(c => c.type === 'fixed_tail');
+  const { lang } = useLang();
+  const tr = (z: string, e: string) => lang === 'zh' ? z : e;
   const total = countA + countB;
-  const maxA = Math.min(countA, 8);
-  const maxB = Math.min(countB, 8);
-
-  const stageStyle: React.CSSProperties = {
-    background: 'rgba(255,255,255,0.02)',
-    border: '1px solid var(--border)',
-    borderRadius: 'var(--r-lg)',
-    padding: '1rem',
-    minHeight: 80,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: '0.4rem',
-  };
-
-  // Circular
-  if (circular && action === 'P') {
-    const items = [
-      ...Array(maxA).fill(scenario.emojiA),
-      ...Array(maxB).fill(scenario.emojiB),
-    ];
-    const n = items.length;
-    const cx = 90, cy = 90, r = 68;
-    return (
-      <div style={stageStyle}>
-        <svg width={180} height={180} viewBox="0 0 180 180">
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(212,168,67,0.2)" strokeWidth="1.5" strokeDasharray="4 3" />
-          {items.map((emoji, i) => {
-            const angle = (2 * Math.PI * i) / n - Math.PI / 2;
-            const x = cx + r * Math.cos(angle);
-            const y = cy + r * Math.sin(angle);
-            return <text key={i} x={x} y={y} textAnchor="middle" dominantBaseline="middle" fontSize="18">{emoji}</text>;
-          })}
-          <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="rgba(212,168,67,0.7)">{`(${total}-1)!`}</text>
-        </svg>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', width: '100%' }}>
-          ⭕ Circular / 延伸 — {total - 1} remaining objects
-        </div>
-      </div>
-    );
-  }
-
-  // Bundling
-  if (action === 'P' && hasAdj) {
-    return (
-      <div style={stageStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <div style={{
-            display: 'flex', gap: '0.2rem', padding: '0.4rem 0.6rem',
-            background: 'rgba(212,168,67,0.12)', border: '2px dashed rgba(212,168,67,0.5)',
-            borderRadius: 'var(--r-md)', alignItems: 'center',
-          }}>
-            {Array(maxA).fill(0).map((_, i) => (
-              <span key={i} style={{ fontSize: '1.4rem' }} className="animate-pop">{scenario.emojiA}</span>
-            ))}
-            <span style={{ fontSize: '0.65rem', color: 'var(--gold)', marginLeft: 4 }}>捆綁</span>
-          </div>
-          {Array(maxB).fill(0).map((_, i) => (
-            <div key={i} className="emoji-slot filled animate-pop" style={{ animationDelay: `${i * 0.05}s` }}>
-              {scenario.emojiB}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Separation
-  if (action === 'P' && hasNonAdj) {
-    const bItems = Array(maxB).fill(scenario.emojiB);
-    return (
-      <div style={{ ...stageStyle, flexDirection: 'column', gap: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <span style={{ fontSize: '0.8rem', color: 'var(--blue-bright)', opacity: 0.7 }}>↑</span>
-          {bItems.map((emoji, i) => (
-            <>
-              <div key={i} className="emoji-slot filled animate-pop" style={{ animationDelay: `${i * 0.05}s` }}>{emoji}</div>
-              <span style={{ fontSize: '0.8rem', color: 'var(--blue-bright)', opacity: 0.7 }}>↑</span>
-            </>
-          ))}
-        </div>
-        <div style={{ fontSize: '0.7rem', color: 'var(--blue-bright)' }}>
-          ↑ = {maxB + 1} 個可用空位，插入 {scenario.emojiA} × {countA}
-        </div>
-        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Array(maxA).fill(0).map((_, i) => (
-            <span key={i} className="animate-pop" style={{ fontSize: '1.4rem', animationDelay: `${i * 0.08}s` }}>{scenario.emojiA}</span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Fixed positions
-  if (action === 'P' && (hasFixedEnds || hasFixedHead || hasFixedTail)) {
-    const slots = Math.min(total, 8);
-    return (
-      <div style={stageStyle}>
-        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Array(slots).fill(0).map((_, i) => {
-            const isHead = (hasFixedHead || hasFixedEnds) && i === 0;
-            const isTail = (hasFixedTail || hasFixedEnds) && i === slots - 1;
-            const locked = isHead || isTail;
-            return (
-              <div key={i} className={`emoji-slot ${locked ? 'locked' : 'filled'} animate-pop`}
-                style={{ animationDelay: `${i * 0.05}s`, position: 'relative' }}>
-                {locked ? scenario.emojiA : (i < maxB ? scenario.emojiB : '?')}
-                {locked && <span style={{ position: 'absolute', top: -8, right: -6, fontSize: '0.6rem' }}>🔒</span>}
-                <span className="emoji-slot-label">{i + 1}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // Combination
-  if (action === 'C') {
-    return (
-      <div style={{ ...stageStyle, flexDirection: 'column', gap: '0.5rem' }}>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>🎒 全部可選 ({total} 個)</div>
-        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-          {Array(maxA).fill(0).map((_, i) => (
-            <span key={`a-${i}`} className="animate-pop" style={{ fontSize: '1.4rem', animationDelay: `${i * 0.04}s` }}>{scenario.emojiA}</span>
-          ))}
-          {Array(maxB).fill(0).map((_, i) => (
-            <span key={`b-${i}`} className="animate-pop" style={{ fontSize: '1.4rem', animationDelay: `${(maxA + i) * 0.04}s` }}>{scenario.emojiB}</span>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  // Default P: slots
-  return (
-    <div style={stageStyle}>
-      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-        {Array(Math.min(total, 10)).fill(0).map((_, i) => {
-          const emoji = i < maxA ? scenario.emojiA : (i < maxA + maxB ? scenario.emojiB : '?');
-          return (
-            <div key={i} className="emoji-slot filled animate-pop" style={{ animationDelay: `${i * 0.05}s`, position: 'relative' }}>
-              {emoji}
-              <span className="emoji-slot-label">{i + 1}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  const all = [...Array.from({length:countA},(_,i)=>`A${i+1}`), ...Array.from({length:countB},(_,i)=>`B${i+1}`)];
+  const pattern = action === 'P' ? findCategoryExample(countA,countB,constraints) : null;
+  let ai=0,bi=0;
+  const line = pattern?.map(category=>category==='A'?`A${++ai}`:`B${++bi}`) ?? [];
+  const has = (type: ConstraintType)=>constraints.some(item=>item.type===type);
+  const identity = (id:string)=><span key={id} title={`${id}: ${id.startsWith('A')?tr(scenario.typeAZh,scenario.typeAEn):tr(scenario.typeBZh,scenario.typeBEn)}`} style={{display:'inline-flex',flexDirection:'column',alignItems:'center',gap:3,fontSize:'1.3rem',padding:4}}>{id.startsWith('A')?scenario.emojiA:scenario.emojiB}<small style={{fontSize:10,color:'var(--text-secondary)'}}>{id}</small></span>;
+  const firstA = line.findIndex(id => id.startsWith('A'));
+  return <div style={{background:'var(--bg-section)',border:'1px solid var(--border)',borderRadius:'var(--r-lg)',padding:'1rem',textAlign:'center'}}>
+    {circular&&action==='P'?<svg width={220} height={220} viewBox="0 0 220 220" style={{maxWidth:'100%'}}>
+      <circle cx={110} cy={110} r={85} fill="none" stroke="var(--border)" strokeDasharray="4 3"/>
+      {all.map((id,i)=>{const angle=2*Math.PI*i/Math.max(1,total)-Math.PI/2;return <g key={id}><text x={110+85*Math.cos(angle)} y={110+85*Math.sin(angle)} textAnchor="middle" dominantBaseline="middle" fontSize={16}>{id.startsWith('A')?scenario.emojiA:scenario.emojiB}</text></g>;})}
+      <text x={110} y={110} textAnchor="middle" fontSize={11} fill="var(--teal)">{tr('固定一個身份','Fix one identity')}</text>
+    </svg>:<div style={{display:'flex',flexWrap:'wrap',alignItems:'center',justifyContent:'center',gap:5}}>
+      {(action==='C'?all:line).map((id,index)=>{
+        if(action==='P'&&has('adjacent')&&id.startsWith('A')){
+          if(index!==firstA)return null;
+          return <div key="bundle" style={{display:'flex',flexWrap:'wrap',border:'2px solid var(--gold)',borderRadius:9,padding:4,background:'var(--gold-pale)',maxWidth:'100%'}}>{line.filter(value=>value.startsWith('A')).map(identity)}</div>;
+        }
+        const locked=action==='P'&&((index===0&&(has('fixed_head')||has('fixed_ends')))||(index===line.length-1&&(has('fixed_tail')||has('fixed_ends'))));
+        return <div key={id} style={{border:locked?'2px solid var(--gold)':'1px solid var(--border)',borderRadius:8,background:'var(--bg-card)'}}>{identity(id)}{action==='P'&&<small style={{display:'block',fontSize:10,color:'var(--text-secondary)'}}>{tr(`第 ${index+1} 位`,`Place ${index+1}`)}</small>}</div>;
+      })}
+    </div>}
+    <p style={{fontSize:12,color:'var(--text-secondary)',marginTop:8}}>{action==='C'?tr(`本題全部 ${total} 個可選物件；入選者會在本題動畫中移入小組。`,`All ${total} candidates; the animation moves selected identities into a set.`):line.length||circular?tr(`本題 ${total} 個相異身份的一個合規排列示例。`,`One valid arrangement of this problem’s ${total} distinct identities.`):tr('沒有同時符合全部條件的排列。','No arrangement satisfies all conditions.')}</p>
+  </div>;
 }
 
 // ── Complementary Visualization ────────────────────────────
@@ -1312,7 +1180,7 @@ export default function PCPage() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
             {/* Permutation */}
             <div
-              onClick={() => { setAction('P'); setCircular(false); }}
+              onClick={() => { setAction('P'); setCircular(false); setConstraints(previous => previous.filter(item => !['at_least', 'at_most', 'exactly'].includes(item.type))); }}
               style={{
                 padding: '1.25rem', borderRadius: 'var(--r-lg)', cursor: 'pointer',
                 border: `2px solid ${action === 'P' ? 'rgba(212,168,67,0.6)' : 'var(--border)'}`,
@@ -1335,7 +1203,7 @@ export default function PCPage() {
 
             {/* Combination */}
             <div
-              onClick={() => { setAction('C'); setCircular(false); }}
+              onClick={() => { setAction('C'); setCircular(false); setConstraints(previous => previous.filter(item => ['at_least', 'at_most', 'exactly'].includes(item.type))); }}
               style={{
                 padding: '1.25rem', borderRadius: 'var(--r-lg)', cursor: 'pointer',
                 border: `2px solid ${action === 'C' ? 'rgba(107,155,210,0.6)' : 'var(--border)'}`,
@@ -1701,8 +1569,8 @@ export default function PCPage() {
                 </div>
               </div>
 
-              <div style={{marginBottom:16}}><button className="btn-outline" onClick={() => setShowAnimation(v=>!v)}>{zh('動畫解釋這類思路（示例數字）', 'Animate this method (demo numbers)')}</button>
-                {showAnimation && <CountingAnimation compact scenario={scenarioKey} kind={action === 'C' ? 'choose' : hasC('adjacent') ? 'bundle' : hasC('non_adjacent') ? 'gaps' : 'order'} />}
+              <div style={{marginBottom:16}}><button className="btn-outline" aria-expanded={showAnimation} onClick={() => setShowAnimation(v=>!v)}>{zh(showAnimation ? '收起本題動畫' : '動畫推導本題（跟隨數量及條件）', showAnimation ? 'Hide this problem’s animation' : 'Animate this problem (current counts & conditions)')}</button>
+                {showAnimation && <ContextAnimation model={buildPCAnimation({ scenarioKey, scenario, countA, countB, action, selectCount, circular, result, constraints: constraints.map(item => ({ ...item, value: item.type === 'at_least' ? atLeastVal : item.type === 'at_most' ? atMostVal : item.type === 'exactly' ? exactlyVal : item.value })) })} />}
               </div>
               {/* Steps */}
               <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>

@@ -5,11 +5,12 @@
 // Design: Light Elegant Academic
 // ============================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
-import CountingAnimation from '../components/CountingAnimation';
+import ContextAnimation from '../components/ContextAnimation';
 import ExpressionReasoning from '../components/ExpressionReasoning';
+import { buildProbabilityAnimation, probabilityPresetTerms, type ProbabilityPreset } from '../lib/probabilityAnimation';
 import {
   simpleProbability, flexibleProbability, bayesTheorem,
   fracToLatex, termToLatex, evalTermExact, evalTermListExact,
@@ -414,22 +415,22 @@ export default function ProbabilityPage() {
 
   // Scenario
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>('school');
-  const [storyPreset,setStoryPreset] = useState<'choose'|'order'|'mixed'|'custom'>('choose');
+  const [storyPreset,setStoryPreset] = useState<ProbabilityPreset | 'custom'>('choose');
   const [showAnimation,setShowAnimation] = useState(false);
-  const loadPreset=(preset:'choose'|'order'|'mixed')=>{
+  const loadPreset=(preset: ProbabilityPreset)=>{
+    const { numerator, denominator } = probabilityPresetTerms(preset);
     setStoryPreset(preset);setError('');setProbResult(null);setShowAnimation(false);
-    if(preset==='order'){setNumTerms([{type:'permutation',n:5,r:3}]);setDenTerms([{type:'permutation',n:10,r:3}]);}
-    else {setNumTerms([{type:'combination',n:5,r:2},{type:'combination',n:5,r:1},...(preset==='mixed' ? [{type:'factorial' as const,n:3}] : [])]);setDenTerms([preset==='mixed' ? {type:'permutation',n:10,r:3} : {type:'combination',n:10,r:3}]);}
+    setNumTerms(numerator);
+    setDenTerms(denominator);
   };
 
   // Flexible comb prob
-  const [numTerms, setNumTerms] = useState<ExprTerm[]>([
-    { type: 'combination', n: 5, r: 2 },
-    { type: 'combination', n: 5, r: 1 },
-  ]);
-  const [denTerms, setDenTerms] = useState<ExprTerm[]>([
-    { type: 'combination', n: 10, r: 3 },
-  ]);
+  const [numTerms, setNumTerms] = useState<ExprTerm[]>(() => probabilityPresetTerms('choose').numerator);
+  const [denTerms, setDenTerms] = useState<ExprTerm[]>(() => probabilityPresetTerms('choose').denominator);
+  const animationModel = useMemo(
+    () => storyPreset === 'custom' ? null : buildProbabilityAnimation(scenarioKey, PROB_SCENARIOS[scenarioKey], storyPreset),
+    [scenarioKey, storyPreset],
+  );
 
   // Bayes
   const [pANum, setPANum] = useState(1); const [pADen, setPADen] = useState(10);
@@ -490,7 +491,7 @@ export default function ProbabilityPage() {
       <div className="tab-group" style={{ marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
         {(['single', 'comb', 'bayes'] as Mode[]).map(m => (
           <button key={m}
-            onClick={() => { setMode(m); setProbResult(null); setBayesResult(null); setError(''); setShowTree(false); }}
+            onClick={() => { setMode(m); setProbResult(null); setBayesResult(null); setError(''); setShowTree(false); setShowAnimation(false); }}
             className={`tab-btn ${mode === m ? 'active' : ''}`}>
             {modeLabels[m]}
           </button>
@@ -554,7 +555,7 @@ export default function ProbabilityPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
             {(Object.entries(PROB_SCENARIOS) as [ScenarioKey, ProbScenario][]).map(([key, sc]) => (
-              <button key={key} aria-pressed={scenarioKey===key} onClick={() => setScenarioKey(key)}
+              <button key={key} aria-pressed={scenarioKey===key} onClick={() => { setScenarioKey(key); setProbResult(null); setError(''); }}
                 style={{
                   padding: '0.75rem 0.6rem', borderRadius: 'var(--r-lg)',
                   border: `2px solid ${scenarioKey === key ? 'var(--navy)' : 'var(--border-light)'}`,
@@ -584,7 +585,20 @@ export default function ProbabilityPage() {
                   : (lang==='zh'?`有 5 個相異${a}和 5 個相異${b}，隨機選 3 個再安排到三個不同位置，所有有序安排等可能。求所選成員恰好有 2 個${a}和 1 個${b}的概率（位置不限）。先選成員，再計 3! 種安排。`:`Choose 3 from 5 distinct ${a} and 5 distinct ${b} objects, then assign them to three distinct positions. All ordered arrangements are equally likely. Find the probability of exactly 2 ${a} and 1 ${b}, in any positions. Choose members first, then count 3! assignments.`);
             return <div className="card-gold" style={{padding:18,marginBottom:16}}><strong style={{fontSize:13,color:'var(--gold)'}}>{sc.emojiA}{sc.emojiB} {lang==='zh'?sc.nameZh:sc.nameEn}</strong><p style={{fontSize:14,marginTop:8,lineHeight:1.85}}>{story}</p></div>;
           })()}
-          {storyPreset!=='custom' && <div style={{marginBottom:16}}><button className="btn-outline" onClick={()=>setShowAnimation(v=>!v)}>{lang==='zh'?'動畫理解此方法（示例為 5 選 3）':'Animate this method (5-choose-3 demo)'}</button>{showAnimation && <CountingAnimation compact scenario={scenarioKey} kind={storyPreset}/>}</div>}
+          {animationModel ? (
+            <div style={{marginBottom:16}}>
+              <button className="btn-outline" aria-expanded={showAnimation} onClick={()=>setShowAnimation(v=>!v)}>
+                {lang==='zh' ? (showAnimation ? '收起本題概念動畫' : '動畫理解本題：樣本空間 → 有利結果 → 概率') : (showAnimation ? 'Hide this question’s animation' : 'Animate this question: sample space → favourable outcomes → probability')}
+              </button>
+              {showAnimation && <ContextAnimation key={animationModel.key} model={animationModel} />}
+            </div>
+          ) : (
+            <p className="engine-note" style={{marginBottom:16}}>
+              {lang==='zh'
+                ? '自訂算式暫不顯示情境動畫：你尚未提供每個 n!、nPr、nCr 項目如何對應故事中的來源、選取階段或位置。因此不會把這些項目任意當作人物／物件小組；仍可編輯及計算精確算式。選回上方預設即可觀看對應本題的動畫。'
+                : 'Story animation is unavailable for a custom expression: you have not supplied how each n!, nPr or nCr term maps to story pools, selection stages or positions. We do not arbitrarily assign people/items to these terms. You can still edit and calculate the exact expression, or select a preset above to view its matching animation.'}
+            </p>
+          )}
 
           {/* Step 2: Header */}
           <div className="section-hd" style={{ marginBottom: '0.85rem' }}>

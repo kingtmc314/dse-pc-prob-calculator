@@ -1,0 +1,32 @@
+.ctx-module .ctx-stage { min-height: 240px; overflow: hidden; }
+.ctx-module .ctx-track { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.ctx-module .ctx-row { min-width: 0; }
+.ctx-module .ctx-token { width: 48px; height: 58px; flex-direction: column; gap: 2px; padding: 3px; }
+.ctx-module .ctx-emoji { font-size: 1.3rem; line-height: 1.2; }
+.ctx-module .ctx-identity { font-family: var(--font-mono, monospace); font-size: .68rem; line-height: 1.3; font-weight: 600; }
+.ctx-module .ctx-position { display: flex; flex-direction: column; align-items: center; min-width: 48px; max-width: 110px; }
+.ctx-module .ctx-position-highlight { padding: 3px; border: 1px solid #ba8b20; border-radius: 8px; }
+.ctx-module .ctx-placeholder { min-width: 48px; height: 58px; display: flex; align-items: center; justify-content: center; border: 1.5px dashed #adc2c9; border-radius: 9px; font-size: 1.4rem; color: #829791; background: #ffffff80; }
+.ctx-module .ctx-bundle { max-width: 100%; border: 2px solid #c59a36; padding: 5px; border-radius: 11px; background: var(--gold-pale, #fbf5e0); }
+.ctx-module .ctx-bundle small { display: block; text-align: center; font-size: .69rem; color: #72520c; margin-bottom: 5px; }
+.ctx-module .ctx-bundle > div { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.ctx-module .ctx-team-track { padding: 10px; border: 1.5px solid #8bb9ad; border-radius: 12px; background: #e0f2ee80; }
+.ctx-module .ctx-gap-piece { display: flex; align-items: center; gap: 4px; }
+.ctx-module .ctx-gap { display: flex; align-items: center; flex-direction: column; justify-content: center; border: 1.5px dashed #8ab7aa; border-radius: 7px; min-width: 26px; height: 58px; background: #fff9; color: var(--teal); font-size: 1.1rem; }
+.ctx-module .ctx-gap small { font-size: .68rem; }
+.ctx-module .ctx-gap-selected { border-color: #ba8b20; background: var(--gold-pale); }
+.ctx-module .ctx-example-note { font-size: .74rem; line-height: 1.7; color: var(--text-secondary); margin: 9px 0; }
+.ctx-module .ctx-circle { width: 240px; height: 240px; position: relative; margin: 5px auto; border: 1px dashed #a7c9c0; border-radius: 50%; max-width: 100%; }
+.ctx-module .ctx-circle-position { position: absolute; transform: translate(-50%, -50%); }
+.ctx-module .ctx-circle .ctx-token { width: 30px; height: 36px; gap: 0; }
+.ctx-module .ctx-circle .ctx-emoji { font-size: .8rem; }
+.ctx-module .ctx-circle .ctx-identity { font-size: .5rem; }
+.ctx-module .ctx-circle-center { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: 95px; text-align: center; font-size: .7rem; color: var(--teal); }
+@container (max-width: 450px) {
+  .ctx-module .ctx-token { width: 40px; height: 52px; }
+  .ctx-module .ctx-position { min-width: 40px; }
+  .ctx-module .ctx-track { gap: 6px; }
+  .ctx-module .ctx-placeholder { min-width: 40px; height: 52px; }
+  .ctx-module .ctx-gap-piece { gap: 3px; }
+  .ctx-module .ctx-circle .ctx-token { width: 30px; height: 36px; }
+}

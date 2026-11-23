@@ -17,6 +17,8 @@
 - [x] 計算推導與故事說明整合
 - [x] 檢查精確運算及概率樣本空間一致性
 - [x] 建置、瀏覽器和回歸測試
-- [ ] 正式倉庫提交、GitHub Pages 自動部署確認
+- [x] 正式倉庫提交、GitHub Pages 自動部署確認
+- [x] 概念動畫跟隨原頁面的實際題目、數量與條件
+- [x] 原頁面靜態預覽顯示完整身份集合及合規排列
 
 限制：只修改 /home/ubuntu/dse-pc-prob-calculator；不可修改舊 series-calculator-students 專案。全部公式使用 LaTeX displaystyle。繁體中文／英文雙語。

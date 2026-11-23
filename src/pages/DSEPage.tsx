@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { ArrowRight, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, ExternalLink, Lightbulb, RefreshCw, Shuffle } from 'lucide-react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
-import CountingAnimation from '../components/CountingAnimation';
+import ContextAnimation from '../components/ContextAnimation';
+import { buildDSEAnimation } from '../lib/dseAnimation';
 import {
   checkDSEAnswer, DSE_DIFFICULTIES, DSE_ORIGINAL_NOTICE, DSE_QUESTION_IDS, DSE_REFERENCES, DSE_TOPICS,
   generateDSEQuestions, generateDSEVariant,
@@ -43,6 +44,7 @@ function PracticeWorkspace({ question, mastered, onMaster, onVariant, onRandom }
   const [showHint, setShowHint] = useState(false);
   const [visibleSteps, setVisibleSteps] = useState(0);
   const [showAnimation, setShowAnimation] = useState(false);
+  const animationModel = useMemo(() => buildDSEAnimation(question), [question]);
   const strategy = question.strategies.find(item => item.id === strategyId);
   const solutionId = `dse-solution-${question.id}`;
   const hintId = `dse-hint-${question.id}`;
@@ -137,7 +139,7 @@ function PracticeWorkspace({ question, mastered, onMaster, onVariant, onRandom }
           </div>
           <button type="button" className={`dse-button dse-button-small${showAnimation ? ' dse-button-on' : ''}`} aria-expanded={showAnimation} aria-controls="dse-concept-animation" onClick={() => setShowAnimation(value => !value)}>{showAnimation ? pick('收起動畫', 'Hide animation') : pick('概念動畫', 'Concept animation')}</button>
         </div>
-        {showAnimation && <aside className="dse-animation" id="dse-concept-animation"><CountingAnimation kind={question.animationKind} scenario={question.scenario} compact /><p>{pick('動畫以簡化例子說明方法，不代表本變式的實際人數或答案。', 'The animation illustrates the method with a simplified example, not the exact quantities or answer of this variant.')}</p></aside>}
+        {showAnimation && <aside className="dse-animation" id="dse-concept-animation"><ContextAnimation key={animationModel.key} model={animationModel} /><p>{pick('動畫採用當前題目的故事、實際數字與全部條件，公式及解說與本變式一致。畫面只展示一條示例解題路徑，並非列出所有可能結果。', 'The animation uses the current problem’s story, actual numbers and all conditions, with this variant’s formulas and explanations. It shows one illustrative solution path, not every possible outcome.')}</p></aside>}
         <div className="dse-step-toolbar">
           <span className="dse-step-counter" role="status">{pick(`已揭示 ${visibleSteps} / ${question.steps.length} 步`, `${visibleSteps} / ${question.steps.length} steps revealed`)}</span>
           <button type="button" className="dse-text-button" onClick={() => setVisibleSteps(question.steps.length)} disabled={visibleSteps === question.steps.length} aria-controls={solutionId}>{pick('揭示全部', 'Reveal all')}</button>
