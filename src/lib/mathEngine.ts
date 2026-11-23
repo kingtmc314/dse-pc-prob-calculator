@@ -7,7 +7,7 @@
 
 // ── Factorial ──────────────────────────────────────────────
 export function factorial(n: number): number {
-  if (n < 0) throw new Error('n must be >= 0');
+  if (!Number.isInteger(n) || n < 0 || n > 170) throw new Error('n must be an integer from 0 to 170');
   if (n === 0 || n === 1) return 1;
   let r = 1;
   for (let i = 2; i <= n; i++) r *= i;
@@ -111,10 +111,12 @@ export interface ProbResult {
   latex: string;
   steps: string[];
   decimal: string;
+  exactFraction?: { num: string; den: string };
 }
 
 /** Simple probability: favourable / total */
 export function simpleProbability(favourable: number, total: number): ProbResult {
+  if (!Number.isSafeInteger(favourable) || !Number.isSafeInteger(total) || total <= 0 || favourable < 0 || favourable > total) throw new Error('請輸入有效的等可能結果數 / Enter valid equally likely outcome counts');
   const f = simplify(favourable, total);
   const steps: string[] = [
     `\\displaystyle P = \\frac{\\text{favourable}}{\\text{total}} = \\frac{${favourable}}{${total}}`,
@@ -178,6 +180,9 @@ export function bayesTheorem(
   pBgivenA: [number, number], // P(B|A)
   pBgivenAc: [number, number], // P(B|A')
 ): BayesResult {
+  for (const [num, den] of [pA, pBgivenA, pBgivenAc]) {
+    if (!Number.isSafeInteger(num) || !Number.isSafeInteger(den) || den <= 0 || num < 0 || num > den) throw new Error('每個概率必須介乎 0 和 1 / Each probability must be between 0 and 1');
+  }
   const pAf = simplify(pA[0], pA[1]);
   const pAcf = simplify(pA[1] - pA[0], pA[1]);
   const pBgAf = simplify(pBgivenA[0], pBgivenA[1]);
@@ -392,118 +397,68 @@ export interface ExprTerm {
   r?: number; // required for permutation and combination
 }
 
-/** Evaluate a single term to its numeric value */
-export function evalTerm(t: ExprTerm): number {
-  switch (t.type) {
-    case 'factorial':
-      return factorial(t.n);
-    case 'permutation': {
-      const r = t.r ?? 0;
-      if (r > t.n) throw new Error(`P(${t.n},${r}): r cannot exceed n`);
-      return factorial(t.n) / factorial(t.n - r);
-    }
-    case 'combination': {
-      const r = t.r ?? 0;
-      if (r > t.n) throw new Error(`C(${t.n},${r}): r cannot exceed n`);
-      return factorial(t.n) / (factorial(r) * factorial(t.n - r));
-    }
+/** BigInt is used throughout flexible expressions; Number is compatibility only. */
+export function evalTermExact(t: ExprTerm): bigint {
+  if (!Number.isInteger(t.n) || t.n < 0 || t.n > 20) throw new Error('n 必須是 0 至 20 的整數 / n must be an integer from 0 to 20');
+  const r = t.type === 'factorial' ? t.n : (t.r ?? 0);
+  if (!Number.isInteger(r) || r < 0 || r > t.n) throw new Error('r 必須是 0 至 n 的整數 / r must be an integer from 0 to n');
+  let product = 1n;
+  for (let i = 0; i < r; i++) product *= BigInt(t.n - i);
+  if (t.type === 'combination') {
+    let divisor = 1n;
+    for (let i = 2; i <= r; i++) divisor *= BigInt(i);
+    product /= divisor;
   }
+  return product;
 }
-
-/** Render a single term as LaTeX */
+export function evalTerm(t: ExprTerm): number { return Number(evalTermExact(t)); }
 export function termToLatex(t: ExprTerm): string {
-  switch (t.type) {
-    case 'factorial':
-      return `${t.n}!`;
-    case 'permutation':
-      return `P^{${t.n}}_{${t.r ?? 0}}`;
-    case 'combination':
-      return `C^{${t.n}}_{${t.r ?? 0}}`;
-  }
+  if (t.type === 'factorial') return `${t.n}!`;
+  return `${t.type === 'permutation' ? 'P' : 'C'}^{${t.n}}_{${t.r ?? 0}}`;
 }
-
-/** Evaluate a product of terms (numerator or denominator) */
-export function evalTermList(terms: ExprTerm[]): number {
-  if (terms.length === 0) return 1;
-  return terms.reduce((acc, t) => acc * evalTerm(t), 1);
+export function evalTermListExact(terms: ExprTerm[]): bigint {
+  if (terms.length > 40) throw new Error('最多 40 個項目 / Maximum 40 terms');
+  return terms.reduce((acc,t) => acc * evalTermExact(t), 1n);
 }
-
-/** Render a product of terms as LaTeX (joined by x) */
-export function termListToLatex(terms: ExprTerm[]): string {
-  if (terms.length === 0) return '1';
-  return terms.map(termToLatex).join(' \\times ');
+export function evalTermList(terms: ExprTerm[]): number { return Number(evalTermListExact(terms)); }
+export function termListToLatex(terms: ExprTerm[]): string { return terms.length ? terms.map(termToLatex).join(' \\times ') : '1'; }
+function bigGcd(a: bigint,b: bigint): bigint { while (b) { [a,b] = [b,a%b]; } return a; }
+function exactRatio(num: bigint,den: bigint) { const g=bigGcd(num,den); return {num:num/g,den:den/g}; }
+function exactLatex(num: bigint,den: bigint): string { return den === 1n ? String(num) : `\\frac{${num}}{${den}}`; }
+function exactDecimal(num: bigint,den: bigint,places=4): string {
+  const scale=10n**BigInt(places),rounded=(num*scale+den/2n)/den;
+  const whole=rounded/scale,tail=String(rounded%scale).padStart(places,'0').replace(/0+$/,'');
+  return tail ? `${whole}.${tail}` : String(whole);
 }
-
-/**
- * Flexible P&C probability:
- *   P = (product of numerator terms) / (product of denominator terms)
- * Returns full ProbResult with step-by-step LaTeX derivation.
- */
-export function flexibleProbability(
-  numeratorTerms: ExprTerm[],
-  denominatorTerms: ExprTerm[],
-): ProbResult {
-  const numVal = evalTermList(numeratorTerms);
-  const denVal = evalTermList(denominatorTerms);
-  if (denVal === 0) throw new Error('Denominator evaluates to 0');
-  const f = simplify(numVal, denVal);
-
-  const numLatex = termListToLatex(numeratorTerms);
-  const denLatex = termListToLatex(denominatorTerms);
-
-  const numExpanded = numeratorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
-  const denExpanded = denominatorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
-
-  const steps: string[] = [
-    `\\displaystyle P = \\frac{${numLatex}}{${denLatex}}`,
-    `\\displaystyle = \\frac{${numExpanded}}{${denExpanded}}`,
-    `\\displaystyle = \\frac{${numVal.toLocaleString()}}{${denVal.toLocaleString()}} = ${fracToLatex(f)}`,
-  ];
-
+export function termDerivation(t: ExprTerm): string {
+  const r=t.r ?? 0;
+  const formula=t.type === 'factorial' ? (t.n <= 1 ? '1' : Array.from({length:t.n},(_,i)=>String(t.n-i)).join(' \\times '))
+    : t.type === 'permutation' ? `\\frac{${t.n}!}{(${t.n}-${r})!}` : `\\frac{${t.n}!}{${r}!\\,(${t.n}-${r})!}`;
+  return `\\displaystyle ${termToLatex(t)} = ${formula} = ${evalTermExact(t)}`;
+}
+export function flexibleProbability(numeratorTerms: ExprTerm[],denominatorTerms: ExprTerm[]): ProbResult {
+  if (!numeratorTerms.length || !denominatorTerms.length) throw new Error('分子分母都需要項目 / Both numerator and denominator need terms');
+  const num=evalTermListExact(numeratorTerms), den=evalTermListExact(denominatorTerms);
+  if (num > den) throw new Error('有利結果數大於總結果數。請檢查樣本空間及分子／分母的計數方式。 / Favourable outcomes exceed total outcomes. Check your sample space.');
+  const f=exactRatio(num,den);
+  const fraction={num:Number(f.num),den:Number(f.den)};
   return {
-    fraction: f,
-    latex: `P = ${fracToLatex(f)}`,
-    steps,
-    decimal: fracToDecimal(f),
+    fraction, exactFraction:{num:String(f.num),den:String(f.den)},
+    latex:`P = ${exactLatex(f.num,f.den)}`,
+    decimal:exactDecimal(f.num,f.den),
+    steps:[...numeratorTerms.map(termDerivation),...denominatorTerms.map(termDerivation),
+      `\\displaystyle N(E) = ${termListToLatex(numeratorTerms)} = ${num}`,
+      `\\displaystyle N(\\Omega) = ${termListToLatex(denominatorTerms)} = ${den}`,
+      `\\displaystyle P(E) = \\frac{N(E)}{N(\\Omega)} = \\frac{${num}}{${den}} = ${exactLatex(f.num,f.den)}`],
   };
 }
-
-/**
- * Flexible P&C count (for PCPage):
- *   result = (product of numerator terms) / (product of denominator terms)
- * Returns value + LaTeX steps.
- */
-export function flexibleCount(
-  numeratorTerms: ExprTerm[],
-  denominatorTerms: ExprTerm[],
-): { value: number; latex: string; steps: string[] } {
-  const numVal = evalTermList(numeratorTerms);
-  const denVal = denominatorTerms.length > 0 ? evalTermList(denominatorTerms) : 1;
-  if (denVal === 0) throw new Error('Denominator evaluates to 0');
-  const value = numVal / denVal;
-
-  const numLatex = termListToLatex(numeratorTerms);
-  const denLatex = denominatorTerms.length > 0 ? termListToLatex(denominatorTerms) : '';
-
-  const numExpanded = numeratorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
-  const denExpanded = denominatorTerms.map(t => evalTerm(t).toLocaleString()).join(' \\times ');
-
-  const fracLatex = denLatex
-    ? `\\dfrac{${numLatex}}{${denLatex}}`
-    : numLatex;
-  const fracExpanded = denLatex
-    ? `\\dfrac{${numExpanded}}{${denExpanded}}`
-    : numExpanded;
-
-  const steps: string[] = [
-    `\\displaystyle ${fracLatex}`,
-    `\\displaystyle = ${fracExpanded}`,
-    `\\displaystyle = ${value.toLocaleString()}`,
-  ];
-
-  return {
-    value,
-    latex: `${fracLatex} = ${value.toLocaleString()}`,
-    steps,
-  };
+export interface FlexibleCountResult { value:number; exactValue:string; latex:string; steps:string[]; }
+export function flexibleCount(numeratorTerms: ExprTerm[],denominatorTerms: ExprTerm[]): FlexibleCountResult {
+  if (!numeratorTerms.length) throw new Error('分子需要至少一個項目 / Add a numerator term');
+  const num=evalTermListExact(numeratorTerms),den=evalTermListExact(denominatorTerms),f=exactRatio(num,den);
+  const expression=denominatorTerms.length ? `\\frac{${termListToLatex(numeratorTerms)}}{${termListToLatex(denominatorTerms)}}` : termListToLatex(numeratorTerms);
+  return {value:Number(num)/Number(den),exactValue:f.den === 1n ? String(f.num) : `${f.num}/${f.den}`,
+    latex:`${expression} = ${exactLatex(f.num,f.den)}`,
+    steps:[...numeratorTerms.map(termDerivation),...denominatorTerms.map(termDerivation),
+      `\\displaystyle ${expression} = \\frac{${num}}{${den}} = ${exactLatex(f.num,f.den)}`]};
 }

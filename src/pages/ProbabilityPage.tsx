@@ -8,9 +8,11 @@
 import { useState, useCallback } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
+import CountingAnimation from '../components/CountingAnimation';
+import ExpressionReasoning from '../components/ExpressionReasoning';
 import {
   simpleProbability, flexibleProbability, bayesTheorem,
-  fracToLatex, termToLatex, evalTerm,
+  fracToLatex, termToLatex, evalTermExact, evalTermListExact,
   type ProbResult, type BayesResult, type BayesTreeNode,
   type ExprTerm, type TermType,
 } from '../lib/mathEngine';
@@ -167,7 +169,7 @@ function TermRow({
         fontSize: '0.72rem', color: 'var(--teal)', fontFamily: 'var(--font-mono)',
         fontWeight: 600, minWidth: 36, textAlign: 'right',
       }}>
-        {(() => { try { return '= ' + evalTerm(term).toLocaleString(); } catch { return '—'; } })()}
+        {(() => { try { return '= ' + evalTermExact(term).toLocaleString(); } catch { return '—'; } })()}
       </div>
 
       {/* Remove button */}
@@ -207,10 +209,10 @@ function TermListBuilder({
   };
 
   // Compute product value
-  let productVal = 1;
+  let productVal = 1n;
   let productErr = '';
   try {
-    productVal = terms.reduce((acc, t) => acc * evalTerm(t), 1);
+    productVal = evalTermListExact(terms);
   } catch (e: unknown) {
     productErr = e instanceof Error ? e.message : 'Error';
   }
@@ -239,8 +241,8 @@ function TermListBuilder({
               style={{
                 padding: '0.2rem 0.5rem',
                 borderRadius: 'var(--r-sm)',
-                border: `1px solid ${accentColor}50`,
-                background: `${accentColor}10`,
+                border: '1px solid var(--border)',
+                background: 'var(--bg-section)',
                 color: accentColor,
                 fontSize: '0.65rem',
                 fontWeight: 700,
@@ -347,8 +349,8 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
         {branches.map(({ child, childY, leaves }, ci) => (
           <g key={ci}>
             <line x1={rootX + 10} y1={rootY} x2={midX - 12} y2={childY} stroke="var(--gold-bright)" strokeWidth={1.8} opacity={0.6} />
-            <foreignObject x={(rootX + midX) / 2 - 22} y={childY + (ci === 0 ? -26 : 6)} width={64} height={22}>
-              <div style={{ fontSize: 10, color: 'var(--gold)', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }}>{fracToLatex(child.prob)}</div>
+            <foreignObject x={(rootX + midX) / 2 - 22} y={childY + (ci === 0 ? -26 : 6)} width={64} height={44}>
+              <div style={{fontSize:10,textAlign:'center'}}><KatexRenderer latex={fracToLatex(child.prob)}/></div>
             </foreignObject>
             <circle cx={midX} cy={childY} r={10} fill="var(--navy-light)" opacity={0.85} />
             <text x={midX} y={childY - 14} textAnchor="middle" fontSize={11} fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>{child.label}</text>
@@ -358,16 +360,16 @@ function TreeDiagram({ data }: { data: BayesTreeNode[] }) {
                 <g key={li}>
                   <line x1={midX + 10} y1={childY} x2={lp.x - 10} y2={lp.y}
                     stroke={lp.isB ? 'var(--teal)' : 'var(--border)'} strokeWidth={lp.isB ? 2 : 1.4} opacity={lp.isB ? 0.8 : 0.5} />
-                  <foreignObject x={(midX + lp.x) / 2 - 20} y={lp.y + (li === 0 ? -22 : 4)} width={54} height={20}>
-                    <div style={{ fontSize: 9, color: 'var(--navy-light)', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }}>{lp.prob}</div>
+                  <foreignObject x={(midX + lp.x) / 2 - 20} y={lp.y + (li === 0 ? -22 : 4)} width={54} height={40}>
+                    <div style={{ fontSize: 9, color: 'var(--navy-light)', textAlign: 'center', fontFamily: 'JetBrains Mono, monospace' }}><KatexRenderer latex={lp.prob}/></div>
                   </foreignObject>
                   <circle cx={lp.x} cy={lp.y} r={9}
                     fill={lp.isB ? 'var(--teal)' : 'var(--bg-muted)'}
                     stroke={lp.isB ? 'var(--teal)' : 'var(--border)'} strokeWidth={1.5} opacity={lp.isB ? 0.85 : 0.7} />
                   <text x={lp.x} y={lp.y - 13} textAnchor="middle" fontSize={10} fill="var(--navy)" fontFamily="Source Sans 3, sans-serif" fontWeight={600}>{lp.label}</text>
                   {lp.isB && (
-                    <foreignObject x={lp.x + 16} y={lp.y - 10} width={100} height={22}>
-                      <div style={{ fontSize: 9, color: 'var(--teal)', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}>= {lp.joint}</div>
+                    <foreignObject x={lp.x + 16} y={lp.y - 10} width={100} height={44}>
+                      <div style={{ fontSize: 9, color: 'var(--teal)', fontFamily: 'JetBrains Mono, monospace', fontWeight: 600 }}><KatexRenderer latex={`= ${lp.joint}`}/></div>
                     </foreignObject>
                   )}
                 </g>
@@ -404,7 +406,7 @@ function StepCard({ latex, index }: { latex: string; index: number }) {
 // ── Main Page ──────────────────────────────────────────────
 export default function ProbabilityPage() {
   const { t, lang } = useLang();
-  const [mode, setMode] = useState<Mode>('single');
+  const [mode, setMode] = useState<Mode>('comb');
 
   // Single prob
   const [fav, setFav] = useState(3);
@@ -412,6 +414,13 @@ export default function ProbabilityPage() {
 
   // Scenario
   const [scenarioKey, setScenarioKey] = useState<ScenarioKey>('school');
+  const [storyPreset,setStoryPreset] = useState<'choose'|'order'|'mixed'|'custom'>('choose');
+  const [showAnimation,setShowAnimation] = useState(false);
+  const loadPreset=(preset:'choose'|'order'|'mixed')=>{
+    setStoryPreset(preset);setError('');setProbResult(null);setShowAnimation(false);
+    if(preset==='order'){setNumTerms([{type:'permutation',n:5,r:3}]);setDenTerms([{type:'permutation',n:10,r:3}]);}
+    else {setNumTerms([{type:'combination',n:5,r:2},{type:'combination',n:5,r:1},...(preset==='mixed' ? [{type:'factorial' as const,n:3}] : [])]);setDenTerms([preset==='mixed' ? {type:'permutation',n:10,r:3} : {type:'combination',n:10,r:3}]);}
+  };
 
   // Flexible comb prob
   const [numTerms, setNumTerms] = useState<ExprTerm[]>([
@@ -458,7 +467,7 @@ export default function ProbabilityPage() {
   const modeLabels: Record<Mode, string> = {
     single: t.modeSingle,
     comb: t.modeCombProb,
-    bayes: t.modeBayes,
+    bayes: `${t.modeBayes} ${lang === 'zh' ? '（延伸）' : '(extension)'}`,
   };
 
   // Build formula preview LaTeX for comb mode
@@ -481,7 +490,7 @@ export default function ProbabilityPage() {
       <div className="tab-group" style={{ marginBottom: 'clamp(0.75rem, 2vw, 1.1rem)' }}>
         {(['single', 'comb', 'bayes'] as Mode[]).map(m => (
           <button key={m}
-            onClick={() => { setMode(m); setProbResult(null); setBayesResult(null); setError(''); }}
+            onClick={() => { setMode(m); setProbResult(null); setBayesResult(null); setError(''); setShowTree(false); }}
             className={`tab-btn ${mode === m ? 'active' : ''}`}>
             {modeLabels[m]}
           </button>
@@ -513,13 +522,13 @@ export default function ProbabilityPage() {
             <div>
               <label className="input-label">{t.inputFav}</label>
               <input type="number" min={0} value={fav}
-                onChange={e => setFav(Math.max(0, parseInt(e.target.value) || 0))}
+                onChange={e => { setProbResult(null); setError(''); setFav(Math.max(0, parseInt(e.target.value) || 0)); }}
                 className="input-field" />
             </div>
             <div>
               <label className="input-label">{t.inputTotal}</label>
               <input type="number" min={1} value={total}
-                onChange={e => setTotal(Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={e => { setProbResult(null); setError(''); setTotal(Math.max(1, parseInt(e.target.value) || 1)); }}
                 className="input-field" />
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
@@ -545,7 +554,7 @@ export default function ProbabilityPage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.6rem', marginBottom: '1rem' }}>
             {(Object.entries(PROB_SCENARIOS) as [ScenarioKey, ProbScenario][]).map(([key, sc]) => (
-              <div key={key} onClick={() => setScenarioKey(key)}
+              <button key={key} aria-pressed={scenarioKey===key} onClick={() => setScenarioKey(key)}
                 style={{
                   padding: '0.75rem 0.6rem', borderRadius: 'var(--r-lg)',
                   border: `2px solid ${scenarioKey === key ? 'var(--navy)' : 'var(--border-light)'}`,
@@ -557,38 +566,25 @@ export default function ProbabilityPage() {
                 <div style={{ fontSize: '0.78rem', fontWeight: 700, color: scenarioKey === key ? 'var(--navy)' : 'var(--text-primary)', fontFamily: 'var(--font-body)' }}>
                   {lang === 'zh' ? sc.nameZh : sc.nameEn}
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
-          {/* Story Banner */}
-          {(() => {
-            const sc = PROB_SCENARIOS[scenarioKey];
-            const numVal = numTerms.length > 0 ? numTerms.reduce((acc, t) => { try { return acc * (t.type === 'factorial' ? (t.n === 0 ? 1 : Array.from({length: t.n}, (_, i) => i + 1).reduce((a, b) => a * b, 1)) : (t.type === 'combination' ? (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v = v * (t.n - i) / (i + 1); return Math.round(v); })() : (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v *= (t.n - i); return v; })())); } catch { return acc; } }, 1) : null;
-            const denVal = denTerms.length > 0 ? denTerms.reduce((acc, t) => { try { return acc * (t.type === 'factorial' ? (t.n === 0 ? 1 : Array.from({length: t.n}, (_, i) => i + 1).reduce((a, b) => a * b, 1)) : (t.type === 'combination' ? (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v = v * (t.n - i) / (i + 1); return Math.round(v); })() : (() => { const r = t.r ?? 0; let v = 1; for (let i = 0; i < r; i++) v *= (t.n - i); return v; })())); } catch { return acc; } }, 1) : null;
-            const storyZh = lang === 'zh'
-              ? `📚 情境：${sc.nameZh} — 分子（${sc.emojiA}${sc.emojiB}有利結果）${numVal !== null ? ' = ' + numVal.toLocaleString() : ''}，分母（所有結果）${denVal !== null ? ' = ' + denVal.toLocaleString() : ''}`
-              : `📚 Scenario: ${sc.nameEn} — Numerator (${sc.emojiA}${sc.emojiB} favourable)${numVal !== null ? ' = ' + numVal.toLocaleString() : ''}, Denominator (total)${denVal !== null ? ' = ' + denVal.toLocaleString() : ''}`;
-            return (
-              <div style={{
-                background: 'rgba(212,168,67,0.06)',
-                border: '1px solid rgba(212,168,67,0.25)',
-                borderLeft: '4px solid var(--gold)',
-                borderRadius: 'var(--r-md)',
-                padding: '0.65rem 0.9rem',
-                marginBottom: '1rem',
-                fontSize: '0.78rem',
-                color: 'var(--text-primary)',
-                fontFamily: 'var(--font-body)',
-                lineHeight: 1.65,
-              }}>
-                <span style={{ fontWeight: 700, color: 'var(--gold)', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  {lang === 'zh' ? '題目情境' : 'Question Context'}
-                </span>
-                <div style={{ marginTop: '0.25rem' }}>{storyZh}</div>
-              </div>
-            );
+          <div className="tab-group" style={{marginBottom:16}}>
+            {(['choose','order','mixed'] as const).map(preset=><button key={preset} className={`tab-btn ${storyPreset===preset?'active':''}`} onClick={()=>loadPreset(preset)}>{preset==='choose' ? (lang==='zh'?'只選小組 · nCr':'Choose a group · nCr') : preset==='order' ? (lang==='zh'?'依次安排 · nPr':'Ordered selection · nPr') : (lang==='zh'?'先選後排 · 混合':'Choose then arrange · Mixed')}</button>)}
+          </div>
+          {(()=>{
+            const sc=PROB_SCENARIOS[scenarioKey],a=lang==='zh'?sc.typeAZh:sc.typeAEn,b=lang==='zh'?sc.typeBZh:sc.typeBEn;
+            const story=storyPreset==='custom'
+              ? (lang==='zh'?'目前為自訂算式。下列項目由你設定，故事背景不會自動證明此算式正確。請確保每個階段不重複計數，且分子分母描述同一樣本空間。':'Custom expression: these terms are yours. The story does not automatically validate the model. Avoid double counting and use a consistent sample space.')
+              : storyPreset==='choose'
+                ? (lang==='zh'?`有 5 個相異${a}和 5 個相異${b}，不放回地隨機選 3 個，每個三人／三物小組的機會相同。求恰好選到 2 個${a}和 1 個${b}的概率。只計成員，不計選取次序。`:`There are 5 distinct ${a} objects and 5 distinct ${b} objects. Choose 3 without replacement; every three-object group is equally likely. Find the probability of exactly 2 ${a} and 1 ${b}. Selection order is ignored.`)
+                : storyPreset==='order'
+                  ? (lang==='zh'?`有 5 個相異${a}和 5 個相異${b}，不放回地依次選出 3 個，放在第一、第二、第三個位置。所有有序結果等可能。求三個位置都是${a}的概率。`:`From 5 distinct ${a} and 5 distinct ${b} objects, draw 3 without replacement for positions 1, 2 and 3. All ordered outcomes are equally likely. Find the probability all three are ${a}.`)
+                  : (lang==='zh'?`有 5 個相異${a}和 5 個相異${b}，隨機選 3 個再安排到三個不同位置，所有有序安排等可能。求所選成員恰好有 2 個${a}和 1 個${b}的概率（位置不限）。先選成員，再計 3! 種安排。`:`Choose 3 from 5 distinct ${a} and 5 distinct ${b} objects, then assign them to three distinct positions. All ordered arrangements are equally likely. Find the probability of exactly 2 ${a} and 1 ${b}, in any positions. Choose members first, then count 3! assignments.`);
+            return <div className="card-gold" style={{padding:18,marginBottom:16}}><strong style={{fontSize:13,color:'var(--gold)'}}>{sc.emojiA}{sc.emojiB} {lang==='zh'?sc.nameZh:sc.nameEn}</strong><p style={{fontSize:14,marginTop:8,lineHeight:1.85}}>{story}</p></div>;
           })()}
+          {storyPreset!=='custom' && <div style={{marginBottom:16}}><button className="btn-outline" onClick={()=>setShowAnimation(v=>!v)}>{lang==='zh'?'動畫理解此方法（示例為 5 選 3）':'Animate this method (5-choose-3 demo)'}</button>{showAnimation && <CountingAnimation compact scenario={scenarioKey} kind={storyPreset}/>}</div>}
 
           {/* Step 2: Header */}
           <div className="section-hd" style={{ marginBottom: '0.85rem' }}>
@@ -603,29 +599,14 @@ export default function ProbabilityPage() {
             </div>
           </div>
 
-          {/* Tip */}
-          <div style={{
-            background: 'rgba(107,155,210,0.06)',
-            border: '1px solid rgba(107,155,210,0.2)',
-            borderLeft: '4px solid var(--navy-light)',
-            borderRadius: 'var(--r-md)',
-            padding: '0.6rem 0.85rem',
-            marginBottom: '1rem',
-            fontSize: '0.75rem',
-            color: 'var(--text-secondary)',
-            fontFamily: 'var(--font-body)',
-            lineHeight: 1.6,
-          }}>
-            {lang === 'zh'
-              ? '💡 例如：P = C(5,2)×C(5,1) / C(10,3)　或　P = P(4,2)×3! / 5!　或　P = C(6,2)×P(4,1) / P(10,3)'
-              : '💡 e.g. P = C(5,2)×C(5,1)/C(10,3)  or  P = P(4,2)×3!/5!  or  P = C(6,2)×P(4,1)/P(10,3)'}
-          </div>
+          <ExpressionReasoning terms={[...numTerms,...denTerms]} probability />
+          <p className="engine-note">{lang==='zh'?'分子：符合條件的結果。分母：全部等可能結果。使用精確整數及約分分數運算。':'Numerator: favourable outcomes. Denominator: all equally likely outcomes. Uses exact integer arithmetic and reduced fractions.'}</p>
 
           {/* Numerator */}
           <TermListBuilder
             label={lang === 'zh' ? '分子（有利結果數）' : 'Numerator (favourable)'}
             terms={numTerms}
-            onChange={t => { setNumTerms(t); setProbResult(null); setError(''); }}
+            onChange={t => { setNumTerms(t); setStoryPreset('custom'); setShowAnimation(false); setProbResult(null); setError(''); }}
             lang={lang}
             accentColor="var(--gold)"
           />
@@ -644,7 +625,7 @@ export default function ProbabilityPage() {
           <TermListBuilder
             label={lang === 'zh' ? '分母（總結果數）' : 'Denominator (total)'}
             terms={denTerms}
-            onChange={t => { setDenTerms(t); setProbResult(null); setError(''); }}
+            onChange={t => { setDenTerms(t); setStoryPreset('custom'); setShowAnimation(false); setProbResult(null); setError(''); }}
             lang={lang}
             accentColor="var(--teal)"
           />
@@ -666,9 +647,9 @@ export default function ProbabilityPage() {
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 'clamp(0.6rem, 2vw, 1rem)', marginBottom: '0.85rem' }}>
-            <FractionInput label={t.inputPA} num={pANum} den={pADen} onNum={setPANum} onDen={setPADen} />
-            <FractionInput label={t.inputPBgivenA} num={pBgANum} den={pBgADen} onNum={setPBgANum} onDen={setPBgADen} />
-            <FractionInput label={t.inputPBgivenAc} num={pBgAcNum} den={pBgAcDen} onNum={setPBgAcNum} onDen={setPBgAcDen} />
+            <FractionInput label={t.inputPA} num={pANum} den={pADen} onNum={v=>{setPANum(v);setBayesResult(null);setShowTree(false);setError('');}} onDen={v=>{setPADen(v);setBayesResult(null);setShowTree(false);setError('');}} />
+            <FractionInput label={t.inputPBgivenA} num={pBgANum} den={pBgADen} onNum={v=>{setPBgANum(v);setBayesResult(null);setShowTree(false);setError('');}} onDen={v=>{setPBgADen(v);setBayesResult(null);setShowTree(false);setError('');}} />
+            <FractionInput label={t.inputPBgivenAc} num={pBgAcNum} den={pBgAcDen} onNum={v=>{setPBgAcNum(v);setBayesResult(null);setShowTree(false);setError('');}} onDen={v=>{setPBgAcDen(v);setBayesResult(null);setShowTree(false);setError('');}} />
           </div>
           <button onClick={calculate} className="btn-primary">{lang === 'zh' ? '計算' : 'Calculate'}</button>
         </div>

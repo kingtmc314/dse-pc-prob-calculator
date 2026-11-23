@@ -1,6 +1,6 @@
 // ============================================================
 // PCPage.tsx – DSE P&C Calculator
-// Design: Premium Dark Glassmorphism | 5-Step Guided Wizard
+// Design: Light Academic Learning Workspace | 5-Step Guided Wizard
 // Features:
 //   • 4 Scenario Templates (Office/School/Restaurant/Family)
 //   • Dynamic Emoji Visualization
@@ -10,16 +10,19 @@
 //   • Full KaTeX displaystyle step-by-step solutions
 // ============================================================
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useLang } from '../contexts/LangContext';
 import KatexRenderer from '../components/KatexRenderer';
+import CountingAnimation from '../components/CountingAnimation';
+import ExpressionReasoning from '../components/ExpressionReasoning';
 import {
   factorial,
   generateQuestion,
   flexibleCount,
-  evalTerm,
+  evalTermExact,
   termToLatex,
-  evalTermList,
+  evalTermListExact,
+  type FlexibleCountResult,
   type PracticeQuestion,
   type QuestionType,
   type ExprTerm,
@@ -97,11 +100,11 @@ const SCENARIOS: Record<ScenarioKey, Scenario> = {
 // ── Math Helpers ───────────────────────────────────────────
 function perm(n: number, r: number): number {
   if (r < 0 || r > n) return 0;
-  return factorial(n) / factorial(n - r);
+  let result=1; for(let i=0;i<r;i++) result *= n-i; return result;
 }
 function comb(n: number, r: number): number {
   if (r < 0 || r > n) return 0;
-  return factorial(n) / (factorial(r) * factorial(n - r));
+  let result=1n, divisor=1n; for(let i=0;i<r;i++){result*=BigInt(n-i);divisor*=BigInt(i+1);} return Number(result/divisor);
 }
 function fmt(n: number): string { return n.toLocaleString(); }
 
@@ -124,6 +127,41 @@ function calculate(
   const atLeastC = constraints.find(c => c.type === 'at_least');
   const atMostC = constraints.find(c => c.type === 'at_most');
   const exactlyC = constraints.find(c => c.type === 'exactly');
+
+  const fail = (z:string,e:string): CalcResult => ({answer:0,methodZh:'',methodEn:'',steps:[],error:e,errorZh:z});
+  if (!Number.isInteger(total) || total < 1 || total > 18) return fail('請把相異物件總數設為 1 至 18，以保持精確計數。大數算式請使用自由計算。', 'Use 1–18 distinct objects for exact wizard counts. Use Free Calc for larger expressions.');
+  if (circular && constraints.length) return fail('圓形排列不能同時套用此處的直線條件，請取消條件或改用直線排列。','These linear constraints cannot be applied to a circular arrangement. Clear them or choose a line.');
+  if (action === 'P' && hasFixedEnds && countA < 2) return fail('兩端需要兩個不同的 A 類物件。','Two ends need two distinct A-type objects.');
+  if (action === 'P' && constraints.length > 1 && !((hasAdj && hasNonAdj))) {
+    const memo=new Map<string,number>();
+    const layouts=(a:number,b:number,lastA:boolean,phase:number):number => {
+      if(!a && !b) return (hasFixedTail || hasFixedEnds) && !lastA ? 0 : 1;
+      const key=`${a},${b},${lastA},${phase}`; if(memo.has(key)) return memo.get(key)!;
+      const first=a+b===total;
+      let result=0;
+      if(a>0 && !(hasNonAdj && lastA) && !(hasAdj && phase===2)) result+=layouts(a-1,b,true,1);
+      if(b>0 && !(first && (hasFixedHead || hasFixedEnds))) result+=layouts(a,b-1,false,phase===1 ? 2 : phase);
+      memo.set(key,result);return result;
+    };
+    const patterns=layouts(countA,countB,false,0),identities=factorial(countA)*factorial(countB),answer=patterns*identities;
+    return {answer,methodZh:'同時滿足所有條件：類別位置 × 相異物件排列',methodEn:'Combined constraints: category layouts × distinct identities',steps:[
+      {latex:`\\displaystyle N_{\\text{layouts}} = ${patterns}`.replace('\\\\text','\\text'),noteZh:'只計同時符合相鄰／分開及首尾要求的 A、B 類位置模式，不把條件分開相乘。',noteEn:'Count category layouts satisfying every selected condition at once. Do not multiply overlapping restrictions.'},
+      {latex:`\\displaystyle ${countA}! \\times ${countB}! = ${identities}`.replaceAll('\\\\times','\\times'),noteZh:'在每個有效模式中，A 類和 B 類各自分配相異身分。',noteEn:'Within each valid layout, assign the distinct A and B identities.'},
+      {latex:`\\displaystyle N = ${patterns} \\times ${identities} = ${answer}`.replaceAll('\\\\times','\\times'),noteZh:'有效類別位置模式 × 每個模式的身分排法。',noteEn:'Valid category layouts × identity assignments per layout.'}]};
+  }
+  if (action === 'P' && countA === 0 && (hasFixedEnds || hasFixedHead || hasFixedTail)) return fail('沒有 A 類物件，無法安排 A 類在指定位置。','No A-type object is available for the required position.');
+  if (action === 'P' && countA === 0 && (hasAdj || hasNonAdj)) return {answer:factorial(total),methodZh:'沒有 A 類：只排列 B 類',methodEn:'No A objects: arrange B objects',steps:[{latex:`\\displaystyle ${total}! = ${factorial(total)}`,noteZh:'空的 A 類不應額外產生一個捆綁單元。',noteEn:'An empty A category does not create an extra bundle.'}]};
+  if (action === 'C' && constraints.length > 1) {
+    let low=0,high=Math.min(countA,selectCount);
+    if(atLeastC) low=Math.max(low,atLeastC.value ?? 1);
+    if(atMostC) high=Math.min(high,atMostC.value ?? 1);
+    if(exactlyC) {low=Math.max(low,exactlyC.value ?? 1);high=Math.min(high,exactlyC.value ?? 1);}
+    if(low>high || selectCount>total) return fail('這些人數條件沒有共同可行的選法，請檢查「至少／至多／恰好」。','These count constraints have no feasible intersection. Check at least / at most / exactly.');
+    let answer=0;const steps:StepResult[]=[];
+    for(let k=low;k<=high;k++){const other=selectCount-k;if(other<0 || other>countB) continue;const ways=comb(countA,k)*comb(countB,other);answer+=ways;steps.push({latex:`\\displaystyle C^{${countA}}_{${k}} \\times C^{${countB}}_{${other}} = ${ways}`.replaceAll('\\\\times','\\times'),noteZh:`同時符合條件：${k} 個 A 類及 ${other} 個 B 類。`,noteEn:`Satisfying all constraints: ${k} A and ${other} B objects.`});}
+    steps.push({latex:`\\displaystyle N = ${answer}`,noteZh:'不同 A 類人數的情況互不重疊，可以相加。',noteEn:'Cases with different A counts are disjoint, so add their counts.'});
+    return {answer,methodZh:'取條件交集，再分類相加',methodEn:'Intersect constraints, then add disjoint cases',steps};
+  }
 
   // ── Conflict detection ──
   if (hasAdj && hasNonAdj) {
@@ -543,7 +581,7 @@ function EmojiStage({
           <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle" fontSize="11" fill="rgba(212,168,67,0.7)">{`(${total}-1)!`}</text>
         </svg>
         <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', textAlign: 'center', width: '100%' }}>
-          ⭕ 圓形排列 — 固定一人，其餘 {total - 1} 人全排
+          ⭕ Circular / 延伸 — {total - 1} remaining objects
         </div>
       </div>
     );
@@ -700,7 +738,7 @@ function ComplementaryViz({
 
 // ── Practice Mode ──────────────────────────────────────────
 function PracticeMode({ lang }: { lang: string }) {
-  const [question, setQuestion] = useState<PracticeQuestion | null>(null);
+  const [question, setQuestion] = useState<PracticeQuestion>(()=>generateQuestion(Math.random()<0.5?'permutation':'combination'));
   const [userAnswer, setUserAnswer] = useState('');
   const [checked, setChecked] = useState(false);
   const [correct, setCorrect] = useState<boolean | null>(null);
@@ -708,7 +746,7 @@ function PracticeMode({ lang }: { lang: string }) {
   const [showHint, setShowHint] = useState(false);
 
   const newQuestion = useCallback(() => {
-    const types: QuestionType[] = ['permutation', 'combination', 'circular'];
+    const types: QuestionType[] = ['permutation', 'combination'];
     const t = types[Math.floor(Math.random() * types.length)];
     setQuestion(generateQuestion(t));
     setUserAnswer('');
@@ -718,13 +756,12 @@ function PracticeMode({ lang }: { lang: string }) {
     setShowHint(false);
   }, []);
 
-  useEffect(() => { newQuestion(); }, [newQuestion]);
 
   const checkAnswer = () => {
     if (!question) return;
     const ans = typeof question.answer === 'number' ? question.answer : (question.answer.num / question.answer.den);
     const userNum = parseFloat(userAnswer.replace(/,/g, ''));
-    setCorrect(Math.abs(userNum - ans) < 0.5);
+    setCorrect(Number.isFinite(userNum) && userNum === ans);
     setChecked(true);
   };
 
@@ -874,7 +911,7 @@ function FreeCalcTermRow({
         <KatexRenderer latex={`\\displaystyle ${termToLatex(term)}`} display={false} />
       </div>
       <div style={{ fontSize: '0.72rem', color: 'var(--gold)', fontWeight: 600, minWidth: 36, textAlign: 'right' }}>
-        {(() => { try { return '= ' + evalTerm(term).toLocaleString(); } catch { return '—'; } })()}
+        {(() => { try { return '= ' + evalTermExact(term).toLocaleString(); } catch { return '—'; } })()}
       </div>
       <button onClick={() => onRemove(index)}
         style={{
@@ -898,8 +935,8 @@ function FreeCalcTermList({
     onChange([...terms, { type, n: 5, r: type === 'factorial' ? undefined : 2 }]);
   const updateTerm = (i: number, t: ExprTerm) => { const n = [...terms]; n[i] = t; onChange(n); };
   const removeTerm = (i: number) => onChange(terms.filter((_, idx) => idx !== i));
-  let productVal = 1; let productErr = '';
-  try { productVal = evalTermList(terms); } catch (e: unknown) { productErr = e instanceof Error ? e.message : 'Error'; }
+  let productVal = 1n; let productErr = '';
+  try { productVal = evalTermListExact(terms); } catch (e: unknown) { productErr = e instanceof Error ? e.message : 'Error'; }
   return (
     <div style={{ marginBottom: '0.85rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.4rem' }}>
@@ -916,7 +953,7 @@ function FreeCalcTermList({
             <button key={t} onClick={() => addTerm(t)}
               style={{
                 padding: '0.2rem 0.5rem', borderRadius: 'var(--r-sm)',
-                border: `1px solid ${accentColor}50`, background: `${accentColor}18`,
+                border: '1px solid var(--border)', background: 'var(--bg-section)',
                 color: accentColor, fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer',
               }}>
               + {t === 'factorial' ? 'n!' : t === 'permutation' ? 'P(n,r)' : 'C(n,r)'}
@@ -950,7 +987,7 @@ function FreeCalcMode({ lang }: { lang: string }) {
   const zh = (z: string, e: string) => lang === 'zh' ? z : e;
   const [numTerms, setNumTerms] = useState<ExprTerm[]>([{ type: 'permutation', n: 5, r: 3 }]);
   const [denTerms, setDenTerms] = useState<ExprTerm[]>([]);
-  const [result, setResult] = useState<{ value: number; latex: string; steps: string[] } | null>(null);
+  const [result, setResult] = useState<FlexibleCountResult | null>(null);
   const [error, setError] = useState('');
 
   const calculate = () => {
@@ -997,6 +1034,8 @@ function FreeCalcMode({ lang }: { lang: string }) {
         )}
       </div>
 
+      <ExpressionReasoning terms={[...numTerms,...denTerms]} />
+      <p className="engine-note">{zh('以整數精確運算；分母選填。非整數結果會以約分分數顯示，計數模型通常應有整數答案。', 'Exact integer arithmetic; denominator optional. Non-integer results remain reduced fractions; a valid counting model normally has an integer answer.')}</p>
       {/* Numerator */}
       <FreeCalcTermList
         label={zh('分子（Numerator）', 'Numerator')}
@@ -1019,7 +1058,7 @@ function FreeCalcMode({ lang }: { lang: string }) {
         terms={denTerms}
         onChange={t => { setDenTerms(t); setResult(null); setError(''); }}
         lang={lang}
-        accentColor="#7ec8a4"
+        accentColor="var(--teal)"
       />
 
       <button className="btn-primary" onClick={calculate} style={{ marginTop: '0.5rem' }}>
@@ -1043,7 +1082,7 @@ function FreeCalcMode({ lang }: { lang: string }) {
               {zh('答案', 'Answer')}
             </div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: '2.8rem', fontWeight: 700, color: 'var(--gold-bright)', lineHeight: 1 }}>
-              {result.value.toLocaleString()}
+              {result.exactValue}
             </div>
           </div>
           {/* Steps */}
@@ -1081,6 +1120,8 @@ export default function PCPage() {
   const [result, setResult] = useState<CalcResult | null>(null);
   const [showPractice, setShowPractice] = useState(false);
   const [showFreeCalc, setShowFreeCalc] = useState(false);
+  const [shownSteps,setShownSteps] = useState(1);
+  const [showAnimation,setShowAnimation] = useState(false);
 
   const scenario = SCENARIOS[scenarioKey];
   const zh = (zh: string, en: string) => lang === 'zh' ? zh : en;
@@ -1103,6 +1144,8 @@ export default function PCPage() {
     });
     const r = calculate(action, countA, countB, selectCount, updated, circular, scenario);
     setResult(r);
+    setShownSteps(1);
+    setShowAnimation(false);
     setStep(5);
   };
 
@@ -1119,6 +1162,13 @@ export default function PCPage() {
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 1rem 3rem' }}>
 
+      <div className="page-header"><h1>{zh('排列與組合工作室', 'P & C workspace')}</h1><p>{zh('用故事建立模型，逐步理解每一項計數。', 'Build a model from a story and understand each counting step.')}</p></div>
+      <div className="pc-modebar">
+        <button className={!showFreeCalc ? 'active' : ''} onClick={() => setShowFreeCalc(false)}>{zh('故事精靈 · 5 步', 'Story wizard · 5 steps')}</button>
+        <button className={showFreeCalc ? 'active' : ''} onClick={() => setShowFreeCalc(true)}>{zh('自由算式 · n! / nPr / nCr', 'Free Calc · n! / nPr / nCr')}</button>
+      </div>
+      {showFreeCalc && <FreeCalcMode lang={lang} />}
+      <div hidden={showFreeCalc}>
       {/* ── Step Wizard ── */}
       <div style={{ padding: '1.5rem 0 1.25rem' }}>
         <div className="step-wizard">
@@ -1155,7 +1205,7 @@ export default function PCPage() {
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(158px, 1fr))', gap: '0.85rem' }}>
             {(Object.entries(SCENARIOS) as [ScenarioKey, Scenario][]).map(([key, sc]) => (
-              <div key={key}
+              <div key={key} role="button" tabIndex={0} aria-pressed={scenarioKey===key} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();setScenarioKey(key);}}}
                 onClick={() => setScenarioKey(key)}
                 style={{
                   padding: '1.25rem 1rem',
@@ -1200,14 +1250,14 @@ export default function PCPage() {
                 {scenario.emojiA} {zh(scenario.typeAZh, scenario.typeAEn)} {zh('人數', 'Count')}
               </label>
               <input type="number" className="input-field" min={0} max={15}
-                value={countA} onChange={e => setCountA(Math.max(0, parseInt(e.target.value) || 0))} />
+                value={countA} onChange={e => setCountA(Math.max(0, Math.min(15, parseInt(e.target.value) || 0)))} />
             </div>
             <div>
               <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
                 {scenario.emojiB} {zh(scenario.typeBZh, scenario.typeBEn)} {zh('人數', 'Count')}
               </label>
               <input type="number" className="input-field" min={0} max={15}
-                value={countB} onChange={e => setCountB(Math.max(0, parseInt(e.target.value) || 0))} />
+                value={countB} onChange={e => setCountB(Math.max(0, Math.min(15, parseInt(e.target.value) || 0)))} />
             </div>
           </div>
 
@@ -1595,7 +1645,7 @@ export default function PCPage() {
       {step === 5 && result && (
         <div className="animate-fade-in-up">
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.5rem', marginBottom: '1rem', color: 'var(--text-primary)' }}>
-            {zh('模擬結果', 'Simulation Results')}
+            {zh('你的模型與推導', 'Your model & reasoning')}
           </h2>
 
           {/* Error */}
@@ -1651,12 +1701,16 @@ export default function PCPage() {
                 </div>
               </div>
 
+              <div style={{marginBottom:16}}><button className="btn-outline" onClick={() => setShowAnimation(v=>!v)}>{zh('動畫解釋這類思路（示例數字）', 'Animate this method (demo numbers)')}</button>
+                {showAnimation && <CountingAnimation compact scenario={scenarioKey} kind={action === 'C' ? 'choose' : hasC('adjacent') ? 'bundle' : hasC('non_adjacent') ? 'gaps' : 'order'} />}
+              </div>
               {/* Steps */}
               <div className="glass-card" style={{ padding: '1.25rem', marginBottom: '1.25rem' }}>
                 <h3 style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '1rem' }}>
                   {zh('解題步驟', 'Step-by-Step Solution')}
                 </h3>
-                {result.steps.map((s, i) => (
+                <p className="engine-note">{zh(`第 ${Math.min(shownSteps,result.steps.length)} / ${result.steps.length} 步：先理解原因，再顯示下一步。`, `Step ${Math.min(shownSteps,result.steps.length)} / ${result.steps.length}: understand the reason before continuing.`)}</p>
+                {result.steps.slice(0,shownSteps).map((s, i) => (
                   <div key={i} className="step-item animate-slide-in" style={{ animationDelay: `${i * 0.06}s` }}>
                     <div className="step-num">{i + 1}</div>
                     <div style={{ flex: 1 }}>
@@ -1667,6 +1721,7 @@ export default function PCPage() {
                     </div>
                   </div>
                 ))}
+                <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:12}}><button className="btn-outline" disabled={shownSteps<=1} onClick={()=>setShownSteps(v=>v-1)}>{zh('上一步','Previous')}</button><button className="btn-primary" disabled={shownSteps>=result.steps.length} onClick={()=>setShownSteps(v=>v+1)}>{zh('顯示下一步','Next step')}</button><button className="btn-ghost" onClick={()=>setShownSteps(result.steps.length)}>{zh('顯示全部','Show all')}</button></div>
               </div>
             </>
           )}
@@ -1687,11 +1742,12 @@ export default function PCPage() {
             </button>
           </div>
           {/* Free Calc Mode */}
-          {showFreeCalc && <FreeCalcMode lang={lang} />}
+
           {/* Practice Mode */}
           {showPractice && <PracticeMode lang={lang} />}
         </div>
       )}
+      </div>
     </div>
   );
 }

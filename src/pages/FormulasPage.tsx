@@ -1,7 +1,7 @@
 // ============================================================
 // Formulas Page – DSE P&C + Probability Formula Reference
 // All formulas in LaTeX displaystyle
-// Portal buttons jump to calculator with pre-filled values
+// Portal buttons jump to the matching calculator
 // Design: Light Elegant Academic — ivory bg, deep navy text,
 //         gold/blue/teal accents, math grid background
 // ============================================================
@@ -21,6 +21,8 @@ interface FormulaCard {
 
 const FORMULAS: FormulaCard[] = [
   // ── P&C ──
+  { titleZh:'階乘：全部排列',titleEn:'Factorial: arrange every object',latex:'\\displaystyle n! = n(n-1)\\cdots 1, \\quad 0!=1',descZh:'n 個相異物件全部排入 n 個不同位置；每排一位，可選數減 1。',descEn:'Arrange n distinct objects in n positions. Each occupied position leaves one fewer choice.',portalTab:'pc',color:'gold' },
+  { titleZh:'排列與組合的關係',titleEn:'How permutations and combinations connect',latex:'\\displaystyle P^n_r = C^n_r \\times r!',descZh:'先選 r 個成員，再分配不同位置。只選成員時，每組 r! 種次序屬重複。',descEn:'Choose r members, then assign positions. When only membership matters, each group has r! duplicate orders.',color:'gold' },
   {
     titleZh: '排列公式',
     titleEn: 'Permutation Formula',
@@ -40,8 +42,8 @@ const FORMULAS: FormulaCard[] = [
     color: 'gold',
   },
   {
-    titleZh: '圓形排列',
-    titleEn: 'Circular Permutation',
+    titleZh: '圓形排列（延伸）',
+    titleEn: 'Circular permutation (extension)',
     latex: `\\displaystyle (n-1)!`,
     descZh: 'n 個不同物件圍成一圈的排列數（固定一個，其餘全排）',
     descEn: 'Arrangements of n distinct items in a circle (fix one, permute the rest)',
@@ -52,7 +54,7 @@ const FORMULAS: FormulaCard[] = [
     titleZh: '捆綁法（相鄰條件）',
     titleEn: 'Bundling Method (Adjacent)',
     latex: `\\displaystyle (B+1)! \\times A!`,
-    descZh: '將 A 類捆成一組，與 B 類一起排列，再乘以 A 類內部排列',
+    descZh: 'A ≥ 1：A 類捆成一組；與 B 個相異物件排列，再乘 A! 種內部次序。',
     descEn: 'Bundle A-type as one unit, arrange with B-type, then multiply internal arrangements of A',
     color: 'gold',
   },
@@ -76,8 +78,8 @@ const FORMULAS: FormulaCard[] = [
     titleZh: '乘法原理',
     titleEn: 'Multiplication Principle',
     latex: `\\displaystyle |A \\times B| = |A| \\cdot |B|`,
-    descZh: '兩個獨立步驟的總方法數等於各步驟方法數之積',
-    descEn: 'Total ways for two independent steps equals product of individual ways',
+    descZh: '每個第一階段結果都有相同數目的第二階段選擇時，把各階段選法相乘。計數乘法原理不等同概率獨立。',
+    descEn: 'Multiply stage counts when each earlier outcome has the same number of continuations; this does not require probabilistic independence.',
     color: 'gold',
   },
   // ── Probability ──
@@ -141,10 +143,10 @@ const FORMULAS: FormulaCard[] = [
   },
   // ── Bayes ──
   {
-    titleZh: '貝葉斯定理',
-    titleEn: "Bayes' Theorem",
+    titleZh: '貝葉斯定理（延伸）',
+    titleEn: "Bayes' theorem (extension)",
     latex: `\\displaystyle P(A \\mid B) = \\frac{P(B \\mid A) \\cdot P(A)}{P(B \\mid A) \\cdot P(A) + P(B \\mid A') \\cdot P(A')}`,
-    descZh: '由後驗概率反推先驗概率，適用於診斷、測試等場景',
+    descZh: '由 P(B|A) 及先驗概率推算 P(A|B)；屬延伸學習，非 DSE 必修要求。',
     descEn: 'Reverse conditional probability, used in diagnostic and testing scenarios',
     portalTab: 'prob',
     color: 'teal',
@@ -153,8 +155,8 @@ const FORMULAS: FormulaCard[] = [
     titleZh: '排列與組合的概率',
     titleEn: 'P&C Probability',
     latex: `\\displaystyle P = \\frac{C^{a}_{x} \\cdot C^{b}_{y}}{C^{n}_{r}}, \\quad x + y = r`,
-    descZh: '從兩類物件中各取若干個的概率',
-    descEn: 'Probability of selecting specific numbers from two types of items',
+    descZh: '這是一個組合模型例子：a+b=n，x+y=r，不放回且所有小組等可能。也可用 nPr、n! 或一致的混合模型。',
+    descEn: 'One combination model: a+b=n, x+y=r, no replacement and equally likely groups. Consistent nPr, n! or mixed models also work.',
     portalTab: 'prob',
     color: 'teal',
   },
@@ -171,18 +173,12 @@ interface Props {
   onPortalToProb: () => void;
 }
 
-export default function FormulasPage({ onPortalToPC, onPortalToProb }: Props) {
-  const { t, lang } = useLang();
-
-  const pcFormulas = FORMULAS.filter(f => f.color === 'gold');
-  const probFormulas = FORMULAS.filter(f => f.color === 'blue');
-  const bayesFormulas = FORMULAS.filter(f => f.color === 'teal');
-
-  function FormulaSection({ title, formulas, colorKey }: {
+function FormulaSection({ title, formulas, colorKey, onPortalToPC, onPortalToProb }: {
     title: string;
     formulas: FormulaCard[];
     colorKey: 'gold' | 'blue' | 'teal';
-  }) {
+  } & Props) {
+    const {t}=useLang();
     const c = COLOR_MAP[colorKey];
     return (
       <div style={{ marginBottom: 'clamp(1.5rem, 4vw, 2.5rem)' }}>
@@ -312,6 +308,15 @@ export default function FormulasPage({ onPortalToPC, onPortalToProb }: Props) {
     );
   }
 
+
+export default function FormulasPage({ onPortalToPC, onPortalToProb }: Props) {
+  const { t, lang } = useLang();
+
+  const pcFormulas = FORMULAS.filter(f => f.color === 'gold');
+  const probFormulas = FORMULAS.filter(f => f.color === 'blue');
+  const bayesFormulas = FORMULAS.filter(f => f.color === 'teal');
+
+
   return (
     <div className="page-wrap" style={{ paddingTop: 'clamp(1rem, 3vw, 1.5rem)', paddingBottom: 'clamp(2rem, 5vw, 3rem)' }}>
       {/* Page Header */}
@@ -353,9 +358,9 @@ export default function FormulasPage({ onPortalToPC, onPortalToProb }: Props) {
         ))}
       </div>
 
-      <FormulaSection title={t.fmPC} formulas={pcFormulas} colorKey="gold" />
-      <FormulaSection title={t.fmProb} formulas={probFormulas} colorKey="blue" />
-      <FormulaSection title={t.fmBayes} formulas={bayesFormulas} colorKey="teal" />
+      <FormulaSection onPortalToPC={onPortalToPC} onPortalToProb={onPortalToProb} title={t.fmPC} formulas={pcFormulas} colorKey="gold" />
+      <FormulaSection onPortalToPC={onPortalToPC} onPortalToProb={onPortalToProb} title={t.fmProb} formulas={probFormulas} colorKey="blue" />
+      <FormulaSection onPortalToPC={onPortalToPC} onPortalToProb={onPortalToProb} title={t.fmBayes} formulas={bayesFormulas} colorKey="teal" />
 
       {/* Footer note */}
       <div style={{
@@ -371,8 +376,8 @@ export default function FormulasPage({ onPortalToPC, onPortalToProb }: Props) {
         textAlign: 'center',
       }}>
         {lang === 'zh'
-          ? '所有公式均以 LaTeX displaystyle 渲染。按「→」按鈕可跳轉至對應計算器。'
-          : 'All formulas rendered in LaTeX displaystyle. Click "→" to jump to the corresponding calculator.'}
+          ? '圓形排列與 Bayes 是延伸內容，非 DSE 必修課程要求。所有公式以 displaystyle 顯示；按箭嘴打開對應工具。'
+          : 'Circular permutations and Bayes are enrichment, not DSE compulsory requirements. All formulas use displaystyle; arrows open the matching tool.'}
       </div>
     </div>
   );

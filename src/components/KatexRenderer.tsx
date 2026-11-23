@@ -13,11 +13,11 @@ export default function KatexRenderer({ latex, display = false, className = '' }
   useEffect(() => {
     if (!ref.current) return;
     try {
-      katex.render(latex, ref.current, {
+      katex.render(latex.startsWith('\\displaystyle') ? latex : `\\displaystyle ${latex}`, ref.current, {
         displayMode: display,
         throwOnError: false,
         strict: false,
-        trust: true,
+        trust: false,
         macros: {
           '\\dfrac': '\\displaystyle\\frac',
         },
